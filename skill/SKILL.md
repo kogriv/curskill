@@ -89,8 +89,10 @@ flowchart TD
   conv --> task[Paste the task as the second message]
   task --> ok{"class local-rc, this folder, worker at this host"}
   ok -->|yes| done[Done]
-  ok -->|"environment or /workspace"| halt[Stop. Do not repeat the same clicks]
+  ok -->|"final class still environment"| halt[Stop. Do not repeat the same clicks]
 ```
+
+The row that counts is the one after `handoff` returns. While `convert-ok` is still waiting, a git folder can read `class=environment` and `workspaceRootPath=/workspace`. Measured 2026-11-25 on k-99: `/data/pro/mqlab` (`gitRepo:github.com/kogriv/mqlab`) stayed environment from 10 s through 50 s and became `local-rc` at 60 s. The same day `/tmp/curskill-e2e-20261125`, which has no GitHub remote, was `local-rc` at 8 s. That middle row is not a reason to stop, to rename, or to start a second handoff. Stop only when the finished command still reports environment. Details: [reference.md](reference.md).
 
 **A new machine.** Read [SETUP.md](../SETUP.md) first: requirements, the
 host file, the person's yes. `scripts/setup.sh` only checks commands and
@@ -240,12 +242,15 @@ uncommitted dialog appears, **Exclude Changes** (not Include, not Enter).
 The Move agent window is **Cancel/Esc only**, never "Stop and Move".
 The toast "Agent starting expensive processes" is closed with the **X**
 before searching for anchors (not Manage, not Don't show again). sqlite:
-`bc-<uuid>`, wait up to 90 s for `convert-ok`. The slash `/remote-control`
-starts an Environment by itself. The "Run on" chip → Self-Hosted Worker is
-a trap in a new chat, not RC.
+`bc-<uuid>`, wait up to 90 s for `convert-ok`. During that wait a git
+folder may show `class=environment` and `/workspace`; the stop rule is
+the row after the wait, not the row in the middle (measured 2026-11-25,
+see the handoff diagram). The slash `/remote-control` starts an
+Environment by itself. The "Run on" chip → Self-Hosted Worker is a trap
+in a new chat, not RC.
 
-Do not rename a session of class environment (`/workspace`) to the
-requested name.
+Do not rename a session whose final class is environment (`/workspace`)
+to the requested name.
 
 sqlite: `scripts/glass.sh show bc-…`, `created-since`, `handoff-ok`,
 `convert-ok`.
@@ -283,10 +288,14 @@ sqlite: `scripts/glass.sh show bc-…`, `created-since`, `handoff-ok`,
    Not a second New Chat, not a second `handoff` in parallel. If the
    screen is not recognized, the command does not click: `shot`, then
    read it. Do not type coordinates.
-10. Check success (below): `handoff-ok`, not a screenshot.
-    class=environment → stop. Do not rename. Do not repeat the same clicks.
-11. The name did not stick on a **local-rc** → `rename --id bc-… name`.
-    Do not rename an Environment session to the requested name.
+10. Check success (below) on the row after `handoff` returns: `handoff-ok`,
+    not a screenshot. Final class=environment → stop. Do not rename. Do
+    not repeat the same clicks. An environment row while `convert-ok` is
+    still counting is not that stop.
+11. The script waits up to 60 s for the new name in sqlite and returns as
+    soon as the name matches. Call `rename --id bc-… name` only if that
+    wait still printed that the name did not stick. Do not rename a
+    session whose final class is environment.
 12. The reply: URL `https://cursor.com/agents/<bc-id>`, **class=local-rc**,
     the name, the folder (`workspaceRootPath`, not `/workspace`), footer
     `/path @ <hostname> (Self-Hosted Worker)`, that other tabs were not
@@ -480,9 +489,11 @@ Every item. A screenshot of "This Computer" or "Set up Environment" is
 - the owner's mouse did not move, **or** it was `unavailable`;
 - other bc-ids were not renamed.
 
-If `class=environment`: stop. Do not rename. Do not run a second `handoff`
-with the same clicks. Tell the user the bc-id, the class,
-`workspaceRootPath`, and `cloudTargetKey`.
+If the finished command still has `class=environment`: stop. Do not
+rename. Do not run a second `handoff` with the same clicks. Tell the
+user the bc-id, the class, `workspaceRootPath`, and `cloudTargetKey`.
+A row that was environment only while `convert-ok` was waiting is not
+this case.
 
 ```bash
 scripts/glass.sh created-since <epoch_ms>

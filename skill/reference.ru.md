@@ -105,8 +105,14 @@ Escape.
 | чип «Run on» → Self-Hosted Worker | выбирает Worker в *новом* чате, кнопка Set up Environment |
 | футер This Computer → Continue on → Self-Hosted Worker | **local-rc** (`bc-…`, `bc-…`) |
 
-Промежуточный environment первые секунды после конвертации — не отказ.
-`convert-ok` ждёт `class=local-rc` + папка + воркер, до 90 с.
+Промежуточный environment, пока `convert-ok` ещё ждёт, — не отказ.
+Ожидание до 90 с: `class=local-rc` плюс папка плюс воркер. 25.11.2026,
+k-99, `/data/pro/mqlab` (`cloudTargetKey=gitRepo:github.com/kogriv/mqlab`)
+была `environment` с `workspaceRootPath=/workspace` на 10, 20, 30, 40 и
+50-й секундах и `local-rc` на `/data/pro/mqlab` на 60-й
+(`bc-0686f1ab`). В тот же день `/tmp/curskill-e2e-20261125` без
+GitHub-remote стала `local-rc` на 8-й секунде. Судить по строке после
+возврата команды. Если на 90-й секунде всё ещё environment — это отказ.
 
 Не делать: rename сессии Environment в запрошенное имя; слэш; Include Changes;
 считать чип Worker в новом чате локальным RC.

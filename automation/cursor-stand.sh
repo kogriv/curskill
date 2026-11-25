@@ -77,6 +77,11 @@ PROFILE="${CURSOR_STAND_PROFILE:-${XDG_DATA_HOME:-$HOME/.local/share}/cursor-sta
 export CURSOR_STAND_PROFILE="$PROFILE"
 # Мажор.минор, с которым сняты якоря cmd_handoff (не патч-релиз). Справка, не запрет.
 UI_CALIBRATED="${CURSOR_STAND_UI_CALIBRATED:-3.23}"
+# Имя и isArchived в cloudAgentRepository отстают от клика.
+# 25.11.2026 k-99: 5 с давали ложный отказ, запись приходила без второго клика
+# (rename cur-mql и curskill-e2e, archive curskill-e2e). Потолок 60 с,
+# выход сразу, как sqlite совпал.
+SQLITE_UI_WAIT_SEC="${CURSOR_STAND_SQLITE_UI_WAIT_SEC:-60}"
 # handoff папку берёт только явным -w. Пустой дефолт — папка не подставляется.
 WORKSPACE_ENV="${CURSOR_STAND_WORKSPACE:-}"
 WORKSPACE="${WORKSPACE_ENV:-}"
@@ -630,10 +635,46 @@ print((best[0] + best[1]) // 2)
 PY
 }
 
-# Правый клик по ТЕКУЩЕЙ выделенной строке → Pin/Unpin, Rename. Два Down, Return.
+# poll_stdout_eq SEC WANT CMD... — stdout CMD каждые CURSOR_STAND_POLL_INTERVAL
+# (дефолт 0.5 с), пока не равен WANT или не выйдет потолок SEC.
+# Печатает последний stdout. Код 0 — совпало.
+poll_stdout_eq() {
+  local sec=$1 want=$2
+  shift 2
+  local i n got interval
+  interval=${CURSOR_STAND_POLL_INTERVAL:-0.5}
+  n=$(awk -v s="$sec" -v i="$interval" 'BEGIN { n=int((s/i)+0.5); if (n<1) n=1; print n }')
+  got=""
+  i=0
+  while [ "$i" -lt "$n" ]; do
+    i=$((i + 1))
+    sleep "$interval"
+    got=$("$@" 2>/dev/null || true)
+    if [ "$got" = "$want" ]; then
+      printf '%s\n' "$got"
+      return 0
+    fi
+  done
+  printf '%s\n' "$got"
+  return 1
+}
+
+# Имя строки cloudAgentRepository. Пустой вывод и код 0, если записи ещё нет.
+agent_name_of() {
+  local line=""
+  if [ "${1:-}" = "--id" ]; then
+    line=$(python3 "$GLASS_AGENTS" resolve --id "$2" 2>/dev/null | sed -n '2p' || true)
+  else
+    line=$(python3 "$GLASS_AGENTS" resolve --current 2>/dev/null | sed -n '2p' || true)
+  fi
+  printf '%s\n' "$line"
+}
+
+# Правый клик по ТЕКУЩЕЙ выделенной строке → Pin/Unpin, Rename.
 # Имя — вставка, не xdotool type (IBus). Перед этим сессию надо открыть (glass_focus_bcid).
+# Второй аргумент — bc-id: ждать имя этой строки, а не той, что окажется selected.
 glass_rename() {
-  local name=$1 y
+  local name=$1 id=${2:-} y
   [ -n "$name" ] || { echo "rename: пустое имя" >&2; return 1; }
   agents_window >/dev/null || return 1
   y=$(sidebar_selected_y) || { echo "rename: не нашёл выделенную сессию в сайдбаре" >&2; return 1; }
@@ -647,7 +688,7 @@ glass_rename() {
   sleep 0.5
   # Пункт Rename — по надписи в меню, не «Down Down Return»: у нижних строк
   # меню открывается вверх, у черновиков состав пунктов другой.
-  local shot pos rx ry i got
+  local shot pos rx ry got
   mkdir -p "$VAR/shots"
   shot="$VAR/shots/_rename-menu.png"
   DISPLAY="$DISP" import -window root "$shot" 2>/dev/null || DISPLAY="$DISP" scrot -o "$shot"
@@ -663,16 +704,18 @@ glass_rename() {
   sleep 0.1
   clip_paste "$name"
   DISPLAY="$DISP" xdotool key --clearmodifiers Return
-  # Итог — по sqlite выделенной сессии, не по факту нажатий.
-  for i in 1 2 3 4 5 6 7 8 9 10; do
-    sleep 0.5
-    got=$(python3 "$GLASS_AGENTS" resolve --current 2>/dev/null | sed -n '2p')
-    if [ "$got" = "$name" ]; then
-      echo "переименовано в '$name' (сайдбар y=$y)"
-      return 0
-    fi
-  done
-  echo "rename: имя в sqlite '$got', ждали '$name' (сайдбар y=$y). Снимок меню $shot" >&2
+  # Итог — по sqlite этой bc-id, не по факту нажатий. Потолок SQLITE_UI_WAIT_SEC.
+  local got=""
+  if [ -n "$id" ]; then
+    got=$(poll_stdout_eq "$SQLITE_UI_WAIT_SEC" "$name" agent_name_of --id "$id") || true
+  else
+    got=$(poll_stdout_eq "$SQLITE_UI_WAIT_SEC" "$name" agent_name_of) || true
+  fi
+  if [ "$got" = "$name" ]; then
+    echo "переименовано в '$name' (сайдбар y=$y)"
+    return 0
+  fi
+  echo "rename: имя в sqlite '$got', ждали '$name' (сайдбар y=$y, ждали ${SQLITE_UI_WAIT_SEC} с). Снимок меню $shot" >&2
   return 1
 }
 
@@ -783,7 +826,7 @@ cmd_rename() {
   expected=$(printf '%s\n' "$resolved" | sed -n '2p')
   m_before=$(mouse1)
   glass_focus_bcid "$id" "$expected" || exit 1
-  glass_rename "$new" || exit 1
+  glass_rename "$new" "$id" || exit 1
   m_after=$(mouse1)
   echo "сессия $id  было '$expected'  стало '$new'"
   echo "мышь $ORIG_DISPLAY  до $m_before  после $m_after"
@@ -1110,7 +1153,7 @@ cmd_convert() {
   if [ -n "$name" ]; then
     rname=$(python3 "$GLASS_AGENTS" resolve --id "$nid" 2>/dev/null | sed -n '2p' || true)
     if glass_focus_bcid "$nid" "${rname:-$name}"; then
-      glass_rename "$name" || echo "convert: local-rc есть, имя '$name' не выставилось" >&2
+      glass_rename "$name" "$nid" || echo "convert: local-rc есть, имя '$name' не выставилось" >&2
     fi
   fi
   echo "convert ок: $nid  $ws${name:+  имя $name}"
@@ -1491,7 +1534,7 @@ cmd_handoff() {
   if [ "$ok" -eq 1 ] && [ -n "$name" ]; then
     nname=$(python3 "$GLASS_AGENTS" resolve --id "$nid" | sed -n '2p' || true)
     if glass_focus_bcid "$nid" "${nname:-$name}"; then
-      glass_rename "$name" || echo "handoff: агент $nid создан, имя '$name' не выставилось" >&2
+      glass_rename "$name" "$nid" || echo "handoff: агент $nid создан, имя '$name' не выставилось" >&2
     else
       echo "handoff: local-rc есть, но не открыл вкладку для имени '$name'" >&2
     fi
@@ -1885,17 +1928,16 @@ cmd_archive() {
   ax=$(printf '%s\n' "$pos" | awk '{print $1}')
   ay=$(printf '%s\n' "$pos" | awk '{print $2}')
   DISPLAY="$DISP" xdotool mousemove --sync "$ax" "$ay" click --clearmodifiers 1
-  for i in 1 2 3 4 5 6 7 8 9 10; do
-    sleep 0.5
-    if python3 "$GLASS_AGENTS" is-archived "$id" >/dev/null; then
-      m_after=$(mouse1)
-      echo "в архиве $id ($name, ws=${ws:-?})"
-      echo "мышь $ORIG_DISPLAY  до $m_before  после $m_after"
-      return 0
-    fi
-  done
+  # is-archived печатает true/false. Потолок тот же, что у rename.
+  if poll_stdout_eq "$SQLITE_UI_WAIT_SEC" true \
+      python3 "$GLASS_AGENTS" is-archived "$id" >/dev/null; then
+    m_after=$(mouse1)
+    echo "в архиве $id ($name, ws=${ws:-?})"
+    echo "мышь $ORIG_DISPLAY  до $m_before  после $m_after"
+    return 0
+  fi
   DISPLAY="$DISP" xdotool key --clearmodifiers Escape
-  echo "archive: клик был, sqlite isArchived всё ещё false у $id" >&2
+  echo "archive: клик был, sqlite isArchived всё ещё false у $id (ждали ${SQLITE_UI_WAIT_SEC} с)" >&2
   exit 1
 }
 

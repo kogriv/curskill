@@ -82,8 +82,10 @@ flowchart TD
   conv --> task[Вставить задачу вторым сообщением]
   task --> ok{"класс local-rc, эта папка, воркер этого хоста"}
   ok -->|да| done[Готово]
-  ok -->|"environment или /workspace"| halt[Стоп. Те же клики не повторять]
+  ok -->|"итоговый класс всё ещё environment"| halt[Стоп. Те же клики не повторять]
 ```
+
+Смотреть строку после того, как `handoff` вернулся. Пока `convert-ok` ещё ждёт, папка с GitHub может читаться как `class=environment` и `workspaceRootPath=/workspace`. Замер 25.11.2026 на k-99: `/data/pro/mqlab` (`gitRepo:github.com/kogriv/mqlab`) была environment с 10-й по 50-ю секунду и стала `local-rc` на 60-й. В тот же день `/tmp/curskill-e2e-20261125` без GitHub-remote стала `local-rc` на 8-й секунде. Средняя строка — не повод останавливаться, переименовывать или запускать второй handoff. Стоп — только если закончившаяся команда всё ещё сообщает environment. Подробности: [reference.ru.md](reference.ru.md).
 
 **Новая машина.** Сначала [SETUP.ru.md](../SETUP.ru.md): требования, файл хоста,
 согласие человека. `scripts/setup.sh` только проверяет команды и ничего не
@@ -228,10 +230,14 @@ Worker)» → если диалог uncommitted — **Exclude Changes** (не In
 Enter). Окно Move agent — только **Cancel/Esc**, никогда «Stop and Move».
 Toast «Agent starting expensive processes» — закрывать **крестиком** до
 поиска якорей (не Manage / Don't show again). sqlite: `bc-<uuid>`, ждать
-до 90 с `convert-ok`. Слэш `/remote-control` сам стартует Environment.
-Чип «Run on» → Self-Hosted Worker — ловушка нового чата, не RC.
+до 90 с `convert-ok`. Пока ждёт, папка с git может показывать
+`class=environment` и `/workspace`; стоп — это строка после ожидания, не
+строка посередине (замер 25.11.2026, схема handoff выше). Слэш
+`/remote-control` сам стартует Environment. Чип «Run on» → Self-Hosted
+Worker — ловушка нового чата, не RC.
 
-Сессию класса environment (`/workspace`) в запрошенное имя не переименовывать.
+Сессию, у которой итоговый класс environment (`/workspace`), в
+запрошенное имя не переименовывать.
 
 Разбор sqlite: `scripts/glass.sh show bc-…`, `created-since`, `handoff-ok`,
 `convert-ok`.
@@ -265,9 +271,13 @@ Toast «Agent starting expensive processes» — закрывать **крест
    `wait-worker.sh /тот/же/путь`, затем `stand.sh composer-send --id <bc-id>`
    (не второй New Chat, не второй `handoff` параллельно). Вид экрана не узнан —
    команда не кликает: `shot`, разбор, не координаты с голоса.
-10. Проверка успеха (ниже): `handoff-ok`, не скриншот. class=environment →
-    стоп, не rename, не повтор теми же кликами.
-11. Имя не встало у **local-rc** → `rename --id bc-… имя`. Environment
+10. Проверка успеха (ниже) — по строке после возврата `handoff`:
+    `handoff-ok`, не скриншот. Итоговый class=environment → стоп, не
+    rename, не повтор теми же кликами. Строка environment, пока
+    `convert-ok` ещё считает, этим стопом не является.
+11. Скрипт ждёт имя в sqlite до 60 с и выходит, как только оно совпало.
+    `rename --id bc-… имя` — только если после этого ожидания всё ещё
+    написано, что имя не встало. Сессию с итоговым классом environment
     в запрошенное имя не переименовывать.
 12. Ответ: URL `https://cursor.com/agents/<bc-id>`, **class=local-rc**,
     имя, папка (`workspaceRootPath`, не `/workspace`), footer
@@ -449,9 +459,10 @@ Inbox облачный: список сессий переживает park. RC 
 - мышь стола не сдвинулась **или** была `unavailable`;
 - другие bc-id не переименованы.
 
-Если `class=environment`: стоп. Не rename, не второй `handoff` теми же
-кликами, в ответ пользователю — bc-id, class, `workspaceRootPath`,
-`cloudTargetKey`.
+Если у закончившейся команды класс всё ещё `environment`: стоп. Не
+rename, не второй `handoff` теми же кликами, в ответ пользователю —
+bc-id, class, `workspaceRootPath`, `cloudTargetKey`. Строка, которая
+была environment только пока `convert-ok` ждал, этим случаем не является.
 
 ```bash
 scripts/glass.sh created-since <epoch_ms>

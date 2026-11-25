@@ -112,9 +112,15 @@ On Cursor 3.23 three different gestures, and one of them is RC:
 | the "Run on" chip → Self-Hosted Worker | picks Worker in a *new* chat, button Set up Environment |
 | footer This Computer → Continue on → Self-Hosted Worker | **local-rc** (`bc-…`) |
 
-An intermediate environment in the first seconds after conversion is not
-a refusal. `convert-ok` waits for `class=local-rc` plus the folder plus
-the worker, up to 90 s.
+An intermediate environment while `convert-ok` is still waiting is not
+a refusal. The wait is up to 90 s for `class=local-rc` plus the folder
+plus the worker. On 2026-11-25, k-99, `/data/pro/mqlab`
+(`cloudTargetKey=gitRepo:github.com/kogriv/mqlab`) was `environment`
+with `workspaceRootPath=/workspace` at 10, 20, 30, 40 and 50 s, and
+`local-rc` on `/data/pro/mqlab` at 60 s (`bc-0686f1ab`). The same day
+`/tmp/curskill-e2e-20261125`, with no GitHub remote, was `local-rc` at
+8 s. Judge the row after the command returns. If it is still
+environment at 90 s, that is the refusal.
 
 Do not: rename an Environment session to the requested name; use the
 slash; Include Changes; treat the Worker chip in a new chat as local RC.
