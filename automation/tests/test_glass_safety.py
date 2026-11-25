@@ -9,13 +9,19 @@ from pathlib import Path
 from automation.glass_agents import (
     _ocr_name_match,
     agent_on_host,
+    archive_menu_click,
     classify,
+    composer_click,
     find_anchor,
     handoff_failure,
+    load_agents,
     mcp_source_toggle,
     merge_mcp_json,
+    palette_is_open,
+    palette_text_confirms,
     pick_handoff_agent,
     server_name_from_id,
+    sidebar_row_matches,
     turn_still_planning,
 )
 
@@ -166,8 +172,12 @@ class FolderChipTests(unittest.TestCase):
         ]
         self.assertIsNone(find_anchor(words, "folder-chip"))
 
-    def test_result_row_is_below_the_name(self):
-        self.assertEqual(find_anchor(self._inherited(), "folder-result"), (840, 556))
+    def test_closed_picker_has_no_result_click(self):
+        self.assertIsNone(find_anchor(self._inherited(), "folder-result"))
+
+    def test_open_result_row_is_clicked(self):
+        words = self._inherited() + [_w(812, 548, 160, 16, "/tmp/curskill-pass")]
+        self.assertEqual(find_anchor(words, "folder-result"), (892, 556))
 
 
 class PlanningTests(unittest.TestCase):
@@ -183,6 +193,101 @@ class PlanningTests(unittest.TestCase):
 
     def test_planning_without_next_is_not_the_status(self):
         self.assertFalse(turn_still_planning([_w(592, 138, 60, 15, "Planning")]))
+
+
+class ArchiveClickTests(unittest.TestCase):
+    def test_chat_transcript_is_not_the_menu(self):
+        words = [_w(700, 400, 60, 14, "Archive"), _w(180, 640, 50, 14, "Archive")]
+        self.assertEqual(archive_menu_click(words), (205, 647))
+
+    def test_archive_all_below_is_not_a_click(self):
+        words = [
+            _w(180, 640, 50, 14, "Archive"),
+            _w(240, 640, 24, 14, "All"),
+            _w(270, 642, 40, 14, "Below"),
+        ]
+        self.assertIsNone(archive_menu_click(words))
+
+
+class ComposerClickTests(unittest.TestCase):
+    def test_idea_in_the_transcript_loses_to_the_footer(self):
+        words = [
+            _w(800, 600, 40, 16, "Idea"),
+            _w(606, 1045, 24, 29, "This"),
+            _w(640, 1045, 55, 29, "Computer"),
+        ]
+        self.assertEqual(composer_click(words, "k-99"), (650, 1021))
+
+    def test_new_chat_still_uses_idea(self):
+        words = [_w(800, 600, 40, 16, "Idea")]
+        self.assertEqual(composer_click(words, "k-99"), (820, 518))
+
+
+class PaletteTests(unittest.TestCase):
+    def test_chats_and_files_alone_are_not_the_palette(self):
+        self.assertFalse(palette_is_open("All Chats Files"))
+
+    def test_search_chats_is_the_palette(self):
+        self.assertTrue(palette_is_open("Search chats"))
+
+    def test_five_characters_do_not_confirm(self):
+        self.assertFalse(palette_text_confirms("see hello there", "hello", None))
+
+    def test_long_name_confirms(self):
+        self.assertTrue(
+            palette_text_confirms(
+                "Ready response instruction",
+                "Ready response instruction",
+                None,
+            )
+        )
+
+
+class SidebarRowTests(unittest.TestCase):
+    def test_name_on_the_row(self):
+        words = [_w(40, 330, 70, 14, "full-cycle")]
+        self.assertTrue(sidebar_row_matches(words, 337, "full-cycle"))
+
+    def test_other_row_does_not_match(self):
+        words = [_w(40, 200, 70, 14, "cur-mql")]
+        self.assertFalse(sidebar_row_matches(words, 337, "full-cycle"))
+
+
+class LoadAgentsTests(unittest.TestCase):
+    def test_two_keys_are_both_read(self):
+        import sqlite3
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            db = Path(td) / "state.vscdb"
+            con = sqlite3.connect(db)
+            con.execute("create table ItemTable (key text, value text)")
+            con.execute(
+                "insert into ItemTable values (?, ?)",
+                ("cloudAgentRepository.agents", '[{"bcId":"bc-aaa","name":"one"}]'),
+            )
+            con.execute(
+                "insert into ItemTable values (?, ?)",
+                ("cloudAgentRepository.agents.2", '[{"bcId":"bc-bbb","name":"two"}]'),
+            )
+            con.commit()
+            con.close()
+            got = {a["bcId"] for a in load_agents(db)}
+            self.assertEqual(got, {"bc-aaa", "bc-bbb"})
+
+
+class McpModeTests(unittest.TestCase):
+    def test_new_file_is_0600_and_existing_mode_stays(self):
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "mcp.json"
+            merge_mcp_json(path, "demo", command="echo")
+            self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
+            os.chmod(path, 0o640)
+            merge_mcp_json(path, "demo", command="echo")
+            self.assertEqual(os.stat(path).st_mode & 0o777, 0o640)
 
 
 if __name__ == "__main__":

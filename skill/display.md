@@ -35,9 +35,11 @@ script normalizes the window. Do not pick a size by hand. A new Cursor
 major (measured on 3.23.23: the Environment picker) is not a reason to
 tune coordinates. See [reference.md](reference.md).
 
-Viewing: `x11vnc -display :105 -rfbport 5916 -localhost -forever -shared
--nopw`. The port does not listen outside the machine. Do not put a VNC
-password in git.
+Viewing: `x11vnc -display :105 -rfbport 5916 -localhost -forever -shared`
+with `-passwdfile` pointing at `$PROFILE/var/vnc.pass` (mode `0600`).
+The port does not listen outside the machine. Do not put a VNC password
+in git, and do not print it. An x11vnc that is already listening is left
+until the port is free.
 
 The script does not move the owner's desktop. The `:1` mouse before and
 after an operation must match, or the status is `unavailable` (that

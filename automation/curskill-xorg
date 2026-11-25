@@ -1,10 +1,24 @@
 #!/bin/bash
 # Точечный root-helper Xorg стенда. Только дисплей из /etc/cursor-stand/display, иначе :105.
 # Не общий sudo ALL, не произвольный Xorg. Ставится в /usr/local/sbin/.
+# Конфиг и лог — в каталоге root (по умолчанию /run/curskill-xorg), не в /tmp.
 set -euo pipefail
 
-DISP="${2:-${CURSOR_STAND_DISPLAY:-:105}}"
 TAG="${3:-cursor-stand}"
+# Тег попадает в имя лога. Слэш и .. увели бы файл из каталога runtime.
+case "$TAG" in
+  [A-Za-z0-9._-][A-Za-z0-9._-]*) ;;
+  *) echo "curskill-xorg: тег только латиница, цифры, точка, _ и -" >&2; exit 2 ;;
+esac
+case "$TAG" in
+  .*|*..*) echo "curskill-xorg: тег не начинается с точки и не содержит .." >&2; exit 2 ;;
+esac
+if [ "${#TAG}" -gt 64 ]; then
+  echo "curskill-xorg: тег длиннее 64" >&2
+  exit 2
+fi
+
+DISP="${2:-${CURSOR_STAND_DISPLAY:-:105}}"
 # sudo стирает CURSOR_STAND_DISPLAY. Разрешённый номер — файл root, не окружение.
 # Нет файла — только :105. Строка :1 в файле пустила бы Xorg на стол, файл пишет root.
 ALLOW_FILE="${CURSKILL_XORG_ALLOW:-/etc/cursor-stand/display}"
@@ -27,12 +41,40 @@ elif [ -f "$SCRIPT_DIR/../display/xorg-nvidia-headless.conf" ]; then
 elif [ -f /usr/local/share/cursor-stand/xorg-nvidia-headless.conf ]; then
   CONF_SRC=/usr/local/share/cursor-stand/xorg-nvidia-headless.conf
 else
-  echo "curskill-xorg: задай CURSKILL_XORG_CONF" >&2
-  exit 1
+  CONF_SRC=""
 fi
-RUNTIME_CONF="/tmp/curskill-xorg-nvidia-headless.conf"
-EMPTY_DIR="/tmp/xorg-empty-confdir"
-LOCK="/tmp/.X${DISP#:}-lock"
+
+prepare_runtime() {
+  local dir="${CURSKILL_XORG_RUNTIME:-/run/curskill-xorg}"
+  if [ -L "$dir" ]; then
+    echo "curskill-xorg: $dir это ссылка" >&2
+    exit 1
+  fi
+  if [ -e "$dir" ] && [ ! -d "$dir" ]; then
+    echo "curskill-xorg: $dir не каталог" >&2
+    exit 1
+  fi
+  mkdir -p "$dir"
+  chmod 700 "$dir"
+  if [ "$(id -u)" -eq 0 ]; then
+    chown root:root "$dir"
+    chmod 700 "$dir"
+  fi
+  local mode
+  mode=$(stat -c %a "$dir")
+  case "$mode" in
+    700|500) ;;
+    *) echo "curskill-xorg: $dir права $mode, нужен 700" >&2; exit 1 ;;
+  esac
+  RUNTIME_DIR=$dir
+  RUNTIME_CONF="$dir/nvidia-headless.conf"
+  EMPTY_DIR="$dir/empty-confdir"
+  LOG_FILE="$dir/xorg-${TAG}.log"
+  if [ -L "$RUNTIME_CONF" ] || [ -L "$EMPTY_DIR" ] || [ -L "$LOG_FILE" ]; then
+    echo "curskill-xorg: файл runtime это ссылка" >&2
+    exit 1
+  fi
+}
 
 if [ "$DISP" != "$ALLOWED" ]; then
   echo "curskill-xorg: разрешён только $ALLOWED, дали $DISP" >&2
@@ -56,24 +98,58 @@ PY
 write_runtime_conf() {
   local busid
   busid=$(nvidia_busid)
-  [ -f "$CONF_SRC" ] || { echo "нет $CONF_SRC" >&2; exit 1; }
-  sed -E "s/BusID[[:space:]]+\"PCI:[0-9]+:[0-9]+:[0-9]+\"/BusID      \"$busid\"/" \
-    "$CONF_SRC" > "$RUNTIME_CONF"
+  [ -n "$CONF_SRC" ] && [ -f "$CONF_SRC" ] || { echo "нет ${CONF_SRC:-конфига}" >&2; exit 1; }
+  python3 - "$CONF_SRC" "$RUNTIME_CONF" "$busid" <<'PY'
+import os, re, sys
+src, dst, busid = sys.argv[1:]
+text = open(src, encoding="utf-8").read()
+new = re.sub(
+    r'BusID[[:space:]]+"PCI:[0-9]+:[0-9]+:[0-9]+"',
+    f'BusID      "{busid}"',
+    text,
+    count=1,
+)
+flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+if hasattr(os, "O_NOFOLLOW"):
+    flags |= os.O_NOFOLLOW
+fd = os.open(dst, flags, 0o600)
+with os.fdopen(fd, "w", encoding="utf-8") as fh:
+    fh.write(new)
+os.chmod(dst, 0o600)
+PY
   echo "curskill-xorg: BusID $busid → $RUNTIME_CONF" >&2
 }
 
+prepare_empty_dir() {
+  if [ -L "$EMPTY_DIR" ]; then
+    echo "curskill-xorg: $EMPTY_DIR это ссылка" >&2
+    exit 1
+  fi
+  mkdir -p "$EMPTY_DIR"
+  chmod 700 "$EMPTY_DIR"
+}
+
+LOCK="/tmp/.X${DISP#:}-lock"
+
 case "${1:-}" in
   print-conf)
+    [ -n "$CONF_SRC" ] || { echo "curskill-xorg: задай CURSKILL_XORG_CONF" >&2; exit 1; }
     echo "$CONF_SRC"
     ;;
+  paths)
+    prepare_runtime
+    printf '%s\n' "$RUNTIME_CONF" "$EMPTY_DIR" "$LOG_FILE"
+    ;;
   start)
+    [ -n "$CONF_SRC" ] || { echo "curskill-xorg: задай CURSKILL_XORG_CONF" >&2; exit 1; }
+    prepare_runtime
     write_runtime_conf
-    mkdir -p "$EMPTY_DIR"
+    prepare_empty_dir
     num="${DISP#:}"
     rm -f "/tmp/.X${num}-lock" "/tmp/.X11-unix/X${num}" 2>/dev/null || true
     exec /usr/bin/Xorg "$DISP" -config "$RUNTIME_CONF" -configdir "$EMPTY_DIR" \
       -sharevts -novtswitch -noreset -nolisten tcp \
-      -logfile "/tmp/xorg-${TAG}.log"
+      -logfile "$LOG_FILE"
     ;;
   stop)
     pid=$(tr -d ' \n' < "$LOCK" 2>/dev/null || true)
@@ -92,7 +168,7 @@ case "${1:-}" in
     esac
     ;;
   *)
-    echo "usage: curskill-xorg start|:stop :105 [tag]" >&2
+    echo "usage: curskill-xorg start|stop|paths|print-conf :105 [tag]" >&2
     exit 2
     ;;
 esac

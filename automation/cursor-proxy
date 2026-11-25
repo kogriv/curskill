@@ -13,9 +13,18 @@ if [ -z "${CURSOR_STAND_PROXY:-}" ]; then
   fi
 fi
 PROXY="${CURSOR_STAND_PROXY:-}"
+CURSOR_BIN="${CURSOR_STAND_CURSOR_BIN:-}"
+if [ -z "$CURSOR_BIN" ]; then
+  CURSOR_BIN="/usr/share/cursor/cursor-bin"
+  if [ ! -x "$CURSOR_BIN" ]; then
+    CURSOR_BIN="/usr/share/cursor/cursor"
+  fi
+fi
+
+# Пустой прокси — прямой запуск, как в скилле. URL в stdout не печатается.
+# Если прокси задан, он остаётся в argv Cursor: иначе процесс его не получит.
 if [ -z "$PROXY" ]; then
-  echo "cursor-proxy: задай CURSOR_STAND_PROXY" >&2
-  exit 1
+  exec "$CURSOR_BIN" "$@"
 fi
 
 export http_proxy="$PROXY"
@@ -32,11 +41,6 @@ NO_PROXY_VAL="${CURSOR_STAND_NO_PROXY:-localhost,127.0.0.1,::1}"
 export no_proxy="$NO_PROXY_VAL"
 export NO_PROXY="$NO_PROXY_VAL"
 export PROXY_PROFILE="${PROXY_PROFILE:-default}"
-
-CURSOR_BIN="/usr/share/cursor/cursor-bin"
-if [ ! -x "$CURSOR_BIN" ]; then
-  CURSOR_BIN="/usr/share/cursor/cursor"
-fi
 
 BYPASS=$(printf '%s' "$NO_PROXY_VAL" | tr ',' ';')
 exec "$CURSOR_BIN" \

@@ -54,28 +54,56 @@ stand_declare_monitor() {
   fi
 }
 
+stand_user_runtime() {
+  if [ -n "${CURSOR_STAND_LOG_DIR:-}" ]; then
+    printf '%s\n' "$CURSOR_STAND_LOG_DIR"
+    return
+  fi
+  if [ -n "${XDG_RUNTIME_DIR:-}" ]; then
+    printf '%s\n' "$XDG_RUNTIME_DIR/curskill"
+    return
+  fi
+  printf '%s\n' "/run/user/$(id -u)/curskill"
+}
+
+stand_tag_ok() {
+  case "$1" in
+    [A-Za-z0-9._-][A-Za-z0-9._-]*) ;;
+    *) return 1 ;;
+  esac
+  case "$1" in
+    .*|*..*) return 1 ;;
+  esac
+  [ "${#1}" -le 64 ]
+}
+
 stand_start_xserver() {
-  local disp="$1" tag="$2" num="${1#:}"
+  local disp="$1" tag="$2" num="${1#:}" logdir
   rm -f "/tmp/.X${num}-lock" "/tmp/.X11-unix/X${num}" 2>/dev/null || true
   STAND_XSERVER=$(stand_pick_xserver)
   if [ "$STAND_XSERVER" = "xorg-nvidia" ]; then
-    mkdir -p /tmp/xorg-empty-confdir
-    if [ -x "$STAND_XORG_WRAPPER" ]; then
-      sudo -n "$STAND_XORG_WRAPPER" start "$disp" "$tag" \
-        >"/tmp/xorg-$tag.out" 2>&1 &
-    else
-      sudo -n Xorg "$disp" -config "$STAND_XORG_CONF" -configdir /tmp/xorg-empty-confdir \
-        -sharevts -novtswitch -noreset -nolisten tcp \
-        -logfile "/tmp/xorg-$tag.log" >"/tmp/xorg-$tag.out" 2>&1 &
+    stand_tag_ok "$tag" || { echo "тег экрана не годится: $tag" >&2; exit 1; }
+    if [ ! -x "$STAND_XORG_WRAPPER" ]; then
+      echo "нет $STAND_XORG_WRAPPER — прямой Xorg в /tmp не запускаю" >&2
+      exit 1
     fi
+    logdir=$(stand_user_runtime)
+    if [ -L "$logdir" ]; then
+      echo "каталог лога $logdir это ссылка" >&2
+      exit 1
+    fi
+    mkdir -p "$logdir"
+    chmod 700 "$logdir"
+    sudo -n "$STAND_XORG_WRAPPER" start "$disp" "$tag" \
+      >"$logdir/xorg-$tag.out" 2>&1 &
     STAND_XSERVER_PID=$!; disown; sleep 4
     xdpyinfo -display "$disp" >/dev/null 2>&1 || {
-      echo "Xorg на $disp не поднялся:" >&2; tail -5 "/tmp/xorg-$tag.out" >&2
-      sudo -n tail -5 "/tmp/xorg-$tag.log" >&2 2>/dev/null || true
+      echo "Xorg на $disp не поднялся:" >&2; tail -5 "$logdir/xorg-$tag.out" >&2
+      sudo -n tail -5 "/run/curskill-xorg/xorg-$tag.log" >&2 2>/dev/null || true
       # Хвост журнала часто про занятую карту. Первая причина — модуль ядра
       # старее библиотек после обновления драйвера без перезагрузки.
       if sudo -n grep -q "Failed to initialize the NVIDIA kernel module" \
-          "/tmp/xorg-$tag.log" 2>/dev/null; then
+          "/run/curskill-xorg/xorg-$tag.log" 2>/dev/null; then
         echo "ПРИЧИНА: драйвер видеокарты не завёлся — библиотеки и модуль ядра разных версий" >&2
         echo "  (обновление драйвера без перезагрузки; проверь: nvidia-smi). Лечит перезагрузка;" >&2
         echo "  до неё — программный экран: CURSOR_STAND_X=xvfb" >&2

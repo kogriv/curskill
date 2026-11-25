@@ -225,27 +225,37 @@ write_xdg_open() {
     echo "нет Chrome/Chromium — логин стенда через xdg-open не заведётся" >&2
     chrome=/opt/google/chrome/chrome
   fi
+  local qlog qdisp qproxybin qprofile qchrome qlogin proxy_lines
+  qlog=$(printf '%q' "$VAR/xdg-open.log")
+  qdisp=$(printf '%q' "$DISP")
+  qproxybin=$(printf '%q' "$CURSOR_PROXY")
+  qprofile=$(printf '%q' "$PROFILE")
+  qchrome=$(printf '%q' "$chrome")
+  qlogin=$(printf '%q' "$PROFILE/chrome-login")
+  proxy_lines=""
+  if [ -n "$PROXY_HTTP" ]; then
+    proxy_lines="  --proxy-server=$(printf '%q' "$PROXY_HTTP") \\
+  --proxy-bypass-list=$(printf '%q' 'localhost,127.0.0.1,::1') \\
+"
+  fi
+  # URL в лог не пишется: в нём код логина. DevTools не поднимается.
   cat > "$BIN/xdg-open" <<EOF
 #!/bin/sh
-echo "\$(date -Iseconds) xdg-open \$*" >> "$VAR/xdg-open.log"
+echo "\$(date -Iseconds) xdg-open" >> $qlog
 url="\$1"
 case "\$url" in
   cursor:*|cursor://*)
-    exec env DISPLAY=$DISP \\
-      $CURSOR_PROXY --user-data-dir=$PROFILE --open-url "\$url"
+    exec env DISPLAY=$qdisp \\
+      $qproxybin --user-data-dir=$qprofile --open-url "\$url"
     ;;
 esac
-exec env DISPLAY=$DISP \\
+exec env DISPLAY=$qdisp \\
   GTK_IM_MODULE=xim QT_IM_MODULE=xim XMODIFIERS= \\
-  $chrome \\
-  --user-data-dir=$PROFILE/chrome-login \\
-  ${PROXY_HTTP:+--proxy-server=$PROXY_HTTP} \\
-  ${PROXY_HTTP:+--proxy-bypass-list=localhost,127.0.0.1,::1} \\
-  --ozone-platform=x11 \\
+  $qchrome \\
+  --user-data-dir=$qlogin \\
+${proxy_lines}  --ozone-platform=x11 \\
   --no-first-run --no-default-browser-check \\
   --window-size=1280,900 \\
-  --remote-debugging-port=10522 \\
-  --remote-debugging-address=127.0.0.1 \\
   "\$@"
 EOF
   chmod +x "$BIN/xdg-open"
@@ -371,6 +381,68 @@ cmd_status() {
   adopt_if_live >/dev/null 2>&1 || true
 }
 
+# Хост и порт из URL прокси. userinfo не печатается.
+# http://user:pass@127.0.0.1:10816 → хост 127.0.0.1, порт 10816.
+proxy_host() {
+  python3 - "$1" <<'PY'
+import sys
+from urllib.parse import urlparse
+u = urlparse(sys.argv[1])
+if not u.hostname:
+    sys.exit(1)
+print(u.hostname)
+PY
+}
+
+proxy_port() {
+  python3 - "$1" <<'PY'
+import sys
+from urllib.parse import urlparse
+u = urlparse(sys.argv[1])
+if not u.port:
+    sys.exit(1)
+print(u.port)
+PY
+}
+
+# 0 — локальный прокси слушает, либо хост не локальный (проверку порта пропускаем).
+require_local_proxy_port() {
+  local host port
+  host=$(proxy_host "$1") || return 1
+  port=$(proxy_port "$1") || return 1
+  if [ "$host" = "127.0.0.1" ] || [ "$host" = "localhost" ]; then
+    port_busy "$port" || return 1
+  fi
+  return 0
+}
+
+ensure_vnc_pass() {
+  local f="$VAR/vnc.pass"
+  if [ ! -s "$f" ]; then
+    ( umask 077
+      VNC_PASS_FILE="$f" python3 -c 'import os, secrets; open(os.environ["VNC_PASS_FILE"], "w").write(secrets.token_urlsafe(18))'
+    )
+  fi
+  chmod 600 "$f" || return 1
+  local mode
+  mode=$(stat -c %a "$f" 2>/dev/null || echo "")
+  case "$mode" in
+    600) ;;
+    *) echo "vnc: права $f это ${mode:-?}, нужен 600" >&2; return 1 ;;
+  esac
+}
+
+up_require_agents_window() {
+  open_agents_window_if_needed || {
+    echo "up: окно Cursor Agents на $DISP не открылось — смотри $VAR/cursor.log" >&2
+    return 1
+  }
+  agents_window >/dev/null || {
+    echo "up: окно Cursor Agents на $DISP не открылось — смотри $VAR/cursor.log" >&2
+    return 1
+  }
+}
+
 cmd_up() {
   [ -x "$CURSOR_PROXY" ] || { echo "нет $CURSOR_PROXY" >&2; exit 1; }
   [ -x "$STAND_DISPLAY_SH" ] || { echo "нет исполняемого $STAND_DISPLAY_SH" >&2; exit 1; }
@@ -380,11 +452,9 @@ cmd_up() {
   ensure_not_live_profile
 
   if [ -n "$PROXY_HTTP" ]; then
-    local phost pport
-    phost=$(echo "$PROXY_HTTP" | sed -E 's#^[a-z]+://##; s#:.*##')
-    pport=$(echo "$PROXY_HTTP" | sed -E 's#.*:##')
-    if [ "$phost" = "127.0.0.1" ] || [ "$phost" = "localhost" ]; then
-      port_busy "$pport" || { echo "прокси $PROXY_HTTP не слушает — Cursor пошёл бы в обход настроенного прокси." >&2; exit 1; }
+    if ! require_local_proxy_port "$PROXY_HTTP"; then
+      echo "прокси на localhost не слушает или URL не разобран — Cursor пошёл бы в обход настроенного прокси." >&2
+      exit 1
     fi
   fi
 
@@ -426,9 +496,11 @@ cmd_up() {
   if port_busy "$VNC_PORT"; then
     echo "VNC $VNC_PORT уже слушает — не трогаю"
   else
+    ensure_vnc_pass || return 1
     x11vnc -display "$DISP" -rfbport "$VNC_PORT" -rfbportv6 "$VNC_PORT" \
-      -localhost -forever -shared -nopw \
+      -localhost -forever -shared -passwdfile "$VAR/vnc.pass" \
       >>"$VAR/x11vnc.log" 2>&1 & disown
+    echo "VNC пароль в $VAR/vnc.pass (0600), в лог и git не пишется"
     sleep 1
   fi
 
@@ -449,11 +521,7 @@ cmd_up() {
     sleep 8
   fi
 
-  if open_agents_window_if_needed; then
-    agents_window >/dev/null || true
-  else
-    echo "up: Cursor жив, окна Cursor Agents на $DISP нет — смотри $VAR/cursor.log" >&2
-  fi
+  up_require_agents_window || return 1
 
   STAND_XSERVER=$xserver STAND_XSERVER_PID=$xpid write_state
   ensure_not_live_profile
@@ -676,12 +744,25 @@ agent_name_of() {
 glass_rename() {
   local name=$1 id=${2:-} y
   [ -n "$name" ] || { echo "rename: пустое имя" >&2; return 1; }
+  [ -n "$id" ] || { echo "rename: нужен bc-id, без него строку не кликаю" >&2; return 1; }
   agents_window >/dev/null || return 1
+  local sel current
+  sel=$(python3 "$GLASS_AGENTS" selected | head -1)
+  if [ "$sel" != "$id" ]; then
+    echo "rename: выделена '$sel', ждали $id — не кликаю" >&2
+    return 1
+  fi
+  current=$(python3 "$GLASS_AGENTS" resolve --id "$id" 2>/dev/null | sed -n '2p' || true)
+  [ -n "$current" ] || { echo "rename: нет текущего имени у $id" >&2; return 1; }
   y=$(sidebar_selected_y) || { echo "rename: не нашёл выделенную сессию в сайдбаре" >&2; return 1; }
   if [ "$y" -lt 130 ]; then
     echo "rename: выделено New Chat, не сессия (y=$y)" >&2
     return 1
   fi
+  python3 "$GLASS_AGENTS" row-name "$VAR/shots/_sidebar.png" "$y" "$current" || {
+    echo "rename: строка y=$y не совпала с именем — не кликаю" >&2
+    return 1
+  }
   DISPLAY="$DISP" xdotool mousemove --sync 120 "$y"
   sleep 0.15
   DISPLAY="$DISP" xdotool click --clearmodifiers 3
@@ -908,10 +989,7 @@ write_ui_checked() {
   cursor_pkg_ver > "$VAR/ui-checked"
 }
 
-# Оставлено как справка; handoff больше не отказывает по версии (BL-007).
-handoff_ui_ok() {
-  return 0
-}
+# Версию пакета handoff не проверяет (BL-007). Отдельной функции-заглушки нет.
 
 handoff_shot() {
   mkdir -p "$VAR/shots"
@@ -1554,11 +1632,13 @@ cmd_handoff() {
   local m_after
   m_after=$(mouse1)
   DISPLAY="$DISP" import -window "$wid" "$VAR/shots/handoff-$(date +%H%M%S).png" 2>/dev/null || true
-  echo "handoff отправлен на $DISP (логин $email, папка $ws${name:+, имя $name})"
   echo "мышь $ORIG_DISPLAY  до $m_before  после $m_after"
-  echo "проверь inbox: новая bc-id, не эта сессия. Снимок в $VAR/shots/"
   if [ "$ok" -eq 1 ]; then
+    echo "handoff отправлен на $DISP (логин $email, папка $ws${name:+, имя $name})"
+    echo "проверь inbox: новая bc-id, не эта сессия. Снимок в $VAR/shots/"
     write_ui_checked
+  else
+    echo "handoff: ОТКАЗ — сессия не готова (папка $ws${name:+, имя $name}). Снимок в $VAR/shots/" >&2
   fi
   [ "$ok" -eq 1 ]
 }
@@ -1577,44 +1657,16 @@ stand_worker_dirs() {
 sanitize_cursor_agent_launchers() {
   local root="$PROFILE/User/globalStorage/anysphere.cursor-agent-worker/agent-cli/.local/share/cursor-agent/versions"
   [ -d "$root" ] || return 0
-  python3 - "$root" <<'PY'
+  python3 - "$root" "$HERE/cursor-agent-argv-sanitize.sh" <<'PY'
 import pathlib
 import stat
 import sys
 
 root = pathlib.Path(sys.argv[1])
+block = pathlib.Path(sys.argv[2]).read_text()
+if not block.endswith("\n"):
+    block += "\n"
 marker = "# cursor-stand argv-sanitize: --api-key -> CURSOR_API_KEY"
-block = f"""
-{marker}
-SANITIZED_ARGS=()
-while [ "$#" -gt 0 ]; do
-  case "$1" in
-    --api-key)
-      if [ "$#" -ge 2 ]; then
-        if [ -z "${{CURSOR_API_KEY:-}}" ]; then
-          export CURSOR_API_KEY="$2"
-        fi
-        shift 2
-      else
-        SANITIZED_ARGS+=("$1")
-        shift
-      fi
-      ;;
-    --api-key=*)
-      if [ -z "${{CURSOR_API_KEY:-}}" ]; then
-        export CURSOR_API_KEY="${{1#--api-key=}}"
-      fi
-      shift
-      ;;
-    *)
-      SANITIZED_ARGS+=("$1")
-      shift
-      ;;
-  esac
-done
-set -- "${{SANITIZED_ARGS[@]}}"
-unset SANITIZED_ARGS
-"""
 needle = "\nshould_skip_system_ca() {\n"
 for path in sorted(root.glob("*/cursor-agent")):
     try:
@@ -1622,6 +1674,17 @@ for path in sorted(root.glob("*/cursor-agent")):
     except UnicodeDecodeError:
         continue
     if marker in text:
+        if "не совпадает с --api-key" in text:
+            continue
+        start = text.find(marker)
+        end = text.find("unset SANITIZED_ARGS\n", start)
+        if end == -1:
+            print(f"sanitize: skip {path}: old block has no end", file=sys.stderr)
+            continue
+        end += len("unset SANITIZED_ARGS\n")
+        path.write_text(text[:start] + block + text[end:])
+        path.chmod(stat.S_IMODE(path.stat().st_mode))
+        print(f"sanitize: refreshed {path}", file=sys.stderr)
         continue
     if needle not in text:
         print(f"sanitize: skip {path}: marker point not found", file=sys.stderr)
@@ -1731,6 +1794,14 @@ cmd_ensure() {
   fi
   if [ -n "$busy" ]; then
     echo "ensure: на этой машине работает агент — Cursor стенда не перезапускаю: $(cut -f2 <<<"$busy" | paste -sd, -)" >&2
+    return 1
+  fi
+  shot="$VAR/shots/_ensure-busy-2.png"
+  if ! DISPLAY="$DISP" import -window root "$shot" 2>/dev/null; then
+    DISPLAY="$DISP" scrot -o "$shot" 2>/dev/null || true
+  fi
+  if ! ensure_idle_now "$shot" "$(hostname)"; then
+    echo "ensure: перед остановкой агент уже работает — не убиваю" >&2
     return 1
   fi
   echo "$now" > "$mark"
@@ -1870,9 +1941,42 @@ glass_stop() {
   return 1
 }
 
-# Защита archive — только из config/hosts/<host>.env. Пусто = нет фермо-списка.
+# Защита archive — только из config/hosts/<host>.env.
+# Пустые оба списка: archive отказывается до клика (пример env и SETUP).
 ARCHIVE_PROTECTED_IDS="${ARCHIVE_PROTECTED_IDS:-}"
 ARCHIVE_PROTECTED_NAMES="${ARCHIVE_PROTECTED_NAMES:-}"
+
+archive_protection_ok() {
+  local id=$1 name=$2
+  if [ -z "$ARCHIVE_PROTECTED_IDS" ] && [ -z "$ARCHIVE_PROTECTED_NAMES" ]; then
+    echo "archive: список защиты пуст (ARCHIVE_PROTECTED_IDS и ARCHIVE_PROTECTED_NAMES) — не архивирую" >&2
+    return 1
+  fi
+  case "$ARCHIVE_PROTECTED_IDS" in
+    *"$id"*) echo "archive: отказ, защищённая сессия $id ($name)" >&2; return 1 ;;
+  esac
+  if [ -n "$ARCHIVE_PROTECTED_NAMES" ] && printf '%s\n' "$name" | grep -Eqx "$ARCHIVE_PROTECTED_NAMES"; then
+    echo "archive: отказ, защищённое имя '$name' ($id)" >&2
+    return 1
+  fi
+  return 0
+}
+
+# 0 — прямо сейчас никого нет. Печатает строки busy и возвращает 1, если кто-то работает.
+ensure_idle_now() {
+  local shot=$1 host=$2 busy="" rc=0
+  if [ -n "$shot" ] && [ -s "$shot" ]; then
+    busy=$(python3 "$GLASS_AGENTS" busy "$host" "$shot") || rc=$?
+  else
+    busy=$(python3 "$GLASS_AGENTS" busy "$host") || rc=$?
+  fi
+  # Сбой чтения — не «никого нет»: иначе ensure убьёт Cursor вслепую.
+  if [ "$rc" != 0 ] || [ -n "$busy" ]; then
+    printf '%s\n' "$busy"
+    return 1
+  fi
+  return 0
+}
 
 # archive --id bc-…: меню сайдбара → Archive. Не «Archive All Below».
 cmd_archive() {
@@ -1892,13 +1996,7 @@ cmd_archive() {
     echo "archive: отказ, сессия выполняется (status=1) $id ($name)" >&2
     exit 1
   fi
-  case "$ARCHIVE_PROTECTED_IDS" in
-    *"$id"*) echo "archive: отказ, защищённая сессия $id ($name)" >&2; exit 1 ;;
-  esac
-  if printf '%s\n' "$name" | grep -Eqx "$ARCHIVE_PROTECTED_NAMES"; then
-    echo "archive: отказ, защищённое имя '$name' ($id)" >&2
-    exit 1
-  fi
+  archive_protection_ok "$id" "$name" || exit 1
   printf '%s\n' "$show"
   if python3 "$GLASS_AGENTS" is-archived "$id" >/dev/null; then
     echo "уже в архиве $id ($name)"
@@ -1918,6 +2016,10 @@ cmd_archive() {
     echo "archive: выделено New Chat, не сессия (y=$y)" >&2
     exit 1
   fi
+  python3 "$GLASS_AGENTS" row-name "$VAR/shots/_sidebar.png" "$y" "$name" || {
+    echo "archive: строка y=$y не совпала с именем — не архивирую" >&2
+    exit 1
+  }
   DISPLAY="$DISP" xdotool mousemove --sync 120 "$y"
   sleep 0.15
   DISPLAY="$DISP" xdotool click --clearmodifiers 3

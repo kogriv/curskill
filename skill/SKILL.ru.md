@@ -185,7 +185,7 @@ Return, читай [reference.ru.md](reference.ru.md).
 |---|---|
 | Дисплей | `CURSOR_STAND_DISPLAY` дефолт `:105` |
 | Окно glass | на этом дисплее, `0,0` × `1920×1080` (`agents_window`) |
-| Просмотр | x11vnc `localhost:5916` (`-localhost`, без пароля на loopback) |
+| Просмотр | x11vnc `localhost:5916` (`-localhost`, пароль в `$PROFILE/var/vnc.pass`) |
 | Стол | `CURSOR_STAND_ORIG_DISPLAY` дефолт `:1` — только замер мыши |
 | Клавиатура стола | не забирается: `AutoAddDevices off`, `-sharevts -novtswitch` |
 

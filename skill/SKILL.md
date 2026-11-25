@@ -194,7 +194,7 @@ The stand is a **second X server**, not a window on the owner's desktop.
 |---|---|
 | Display | `CURSOR_STAND_DISPLAY`, default `:105` |
 | Glass window | on that display, `0,0` × `1920×1080` (`agents_window`) |
-| Viewing | x11vnc `localhost:5916` (`-localhost`, no password on loopback) |
+| Viewing | x11vnc `localhost:5916` (`-localhost`, password file `$PROFILE/var/vnc.pass`) |
 | Owner's desktop | `CURSOR_STAND_ORIG_DISPLAY`, default `:1` — mouse measurement only |
 | Owner's keyboard | not taken: `AutoAddDevices off`, `-sharevts -novtswitch` |
 

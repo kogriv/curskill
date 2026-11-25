@@ -31,17 +31,38 @@ DB = Path(os.environ.get("CURSOR_STAND_PROFILE", _profile_default())) / (
 
 
 def load_agents(db: Path = DB) -> list[dict]:
+    """Все строки cloudAgentRepository.agents%, не одна произвольная.
+
+    Одинаковый bcId из более позднего ключа не затирает уже прочитанный:
+    порядок — по key. Строка, которая не список, роняет вызов.
+    """
     uri = f"file:{db}?mode=ro"
     con = sqlite3.connect(uri, uri=True)
-    row = con.execute(
-        "select value from ItemTable where key like 'cloudAgentRepository.agents%'"
-    ).fetchone()
-    if not row:
-        return []
-    raw = row[0]
-    if isinstance(raw, bytes):
-        raw = raw.decode("utf-8")
-    return json.loads(raw)
+    try:
+        rows = con.execute(
+            "select key, value from ItemTable "
+            "where key like 'cloudAgentRepository.agents%' order by key"
+        ).fetchall()
+    finally:
+        con.close()
+    agents: list[dict] = []
+    seen: set[str] = set()
+    for key, raw in rows:
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8")
+        data = json.loads(raw)
+        if not isinstance(data, list):
+            raise SystemExit(f"load_agents: {key} не список")
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            bid = str(item.get("bcId") or "")
+            if bid:
+                if bid in seen:
+                    continue
+                seen.add(bid)
+            agents.append(item)
+    return agents
 
 
 def selected_ids(db: Path = DB) -> tuple[str | None, str | None]:
@@ -459,6 +480,43 @@ def _folder_name_box(
     return best
 
 
+def _folder_result_click(
+    words: list[tuple[int, int, int, int, float, str]],
+) -> tuple[int, int] | None:
+    """Центр видимой строки пикера под чипом. Закрытый пикер — пусто.
+
+    Смещение «на 68 px ниже» попадало в ленту, когда списка на снимке нет.
+    """
+    chip = None
+    zone = ANCHORS["folder-chip"]["zone"]
+    for x, y, w, h, _c, t in words:
+        if _in_zone(x, y, w, h, zone) and _tok_match(_norm_tok(t), "main"):
+            chip = (x, y, w, h)
+            break
+    if chip is None:
+        chip = _folder_name_box(words)
+    if chip is None:
+        return None
+    cy = chip[1] + chip[3] / 2
+    skip = {"repos", "search", "recents", "this", "computer", "nvironment"}
+    best = None
+    for x, y, w, h, _c, t in words:
+        nt = _norm_tok(t)
+        if len(nt) < 2 or nt in skip:
+            continue
+        midy = y + h / 2
+        if not (cy + 36 <= midy <= cy + 110):
+            continue
+        if not (700 <= x <= 1200):
+            continue
+        if best is None or (y, x) < (best[1], best[0]):
+            best = (x, y, w, h)
+    if best is None:
+        return None
+    x, y, w, h = best
+    return x + w // 2, y + h // 2
+
+
 def turn_still_planning(
     words: list[tuple[int, int, int, int, float, str]],
 ) -> bool:
@@ -484,6 +542,8 @@ def turn_still_planning(
 def find_anchor(
     words: list[tuple[int, int, int, int, float, str]], name: str
 ) -> tuple[int, int] | None:
+    if name == "folder-result":
+        return _folder_result_click(words)
     spec = ANCHORS.get(name)
     if not spec:
         return None
@@ -503,14 +563,13 @@ def find_anchor(
         if all(t in found for t in want):
             break
     else:
-        box = _folder_name_box(words) if name in ("folder-chip", "folder-result") else None
+        if name != "folder-chip":
+            return None
+        box = _folder_name_box(words)
         if not box:
             return None
         x, y, w, h = box
-        if name == "folder-chip":
-            return x + w // 2, y + h // 2
-        # Первая строка пикера под чипом: тот же сдвиг, что from-token main -28,+68.
-        return x + w // 2 - 28, y + h // 2 + 68
+        return x + w // 2, y + h // 2
     boxes = [found[t] for t in want]
     x0 = min(b[0] for b in boxes)
     y0 = min(b[1] for b in boxes)
@@ -527,6 +586,60 @@ def find_anchor(
         bx = found[_norm_tok(tok)]
         return bx[0] + bx[2] // 2 + int(dx), bx[1] + bx[3] // 2 + int(dy)
     return cx, cy
+
+
+def composer_click(
+    words: list[tuple[int, int, int, int, float, str]], host: str
+) -> tuple[int, int] | None:
+    """Поле ввода. Футер переписки важнее слова Idea в ленте.
+
+    Новый чат без футера по-прежнему берёт plan-idea (кнопка, поле выше).
+    """
+    for x, y, _w, _h, _c, t in words:
+        if host and host in t and y > 1000 and x > 260:
+            return x + 250, y - 38
+    follow = find_anchor(words, "send-follow-up")
+    if follow:
+        return follow
+    footer = find_anchor(words, "footer-this-computer")
+    if footer:
+        return footer[0], footer[1] - 38
+    return find_anchor(words, "plan-idea")
+
+
+def archive_menu_click(
+    words: list[tuple[int, int, int, int, float, str]],
+) -> tuple[int, int] | None:
+    """Пункт Archive в меню сайдбара. Не лента чата и не Archive All Below."""
+    below_ys = [y for x, y, _w, _h, _c, t in words if t.lower() == "below" and 90 <= x <= 460]
+    all_ys = [y for x, y, _w, _h, _c, t in words if t.lower() == "all" and 90 <= x <= 460]
+    hits = [
+        (x, y, w, h)
+        for x, y, w, h, _c, t in words
+        if t.lower() == "archive"
+        and 90 <= x <= 460
+        and all(abs(y - by) > 12 for by in below_ys)
+        and all(abs(y - ay) > 12 for ay in all_ys)
+    ]
+    if not hits:
+        return None
+    x, y, w, h = hits[0]
+    return x + w // 2, y + h // 2
+
+
+def sidebar_row_matches(
+    words: list[tuple[int, int, int, int, float, str]], y: int, name: str
+) -> bool:
+    """Имя сессии есть в словах строки сайдбара на этой Y. x>280 — не сайдбар."""
+    parts = [p for p in _norm_tok(name).split() if p]
+    if not parts:
+        return False
+    blob = " ".join(
+        _norm_tok(t)
+        for x, yy, w, h, _c, t in words
+        if x <= 280 and abs((yy + h / 2) - y) <= 18 and _norm_tok(t)
+    )
+    return all(part in blob for part in parts)
 
 
 def ocr_image(path: Path) -> str:
@@ -964,11 +1077,55 @@ def merge_mcp_json(
     text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
     if path.exists():
         mode = path.stat().st_mode & 0o777
-    elif path.resolve() == (Path.home() / ".cursor" / "mcp.json").resolve():
-        mode = 0o600
     else:
-        mode = 0o644
+        mode = 0o600
     _atomic_write(path, text, mode)
+
+
+def palette_is_open(text: str) -> bool:
+    """Палитра открыта по заголовку, не по одним словам chats и files."""
+    low = text.lower()
+    hits = sum(t in low for t in ("search agents", "projects", "actions", "settings"))
+    if "search chats" in low or "search agents" in low or hits >= 3:
+        return True
+    return False
+
+
+def palette_text_confirms(text: str, expected_name: str, extra: str | None = None) -> bool:
+    """Имя или bc-id на палитре. Подстрока короче 12 символов не подтверждает."""
+    low = text.lower().replace(" ", "")
+    name = expected_name.strip()
+    token = name.lower()
+    bits = [token] if len(token) <= 16 else [token, " ".join(token.split()[:2])]
+    if extra:
+        bits.append(extra.strip())
+        bits.append(extra.strip()[:20])
+
+    def _squash(s: str) -> str:
+        s = re.sub(r"[^0-9a-zа-яё]", "", s.lower())
+        return s.translate(str.maketrans("1l0", "iio"))
+
+    low_nodash = low.replace("-", "")
+    low_squash = _squash(text)
+    for b in bits:
+        if not b:
+            continue
+        bl = b.lower()
+        compact = re.sub(r"[^0-9a-zа-яё]", "", bl)
+        # Короткое имя и пятибуквенный мусор OCR Return не подтверждают.
+        if len(compact) < 12 and not bare_uuid(bl):
+            continue
+        if len(compact) >= 12 and (bl in text.lower() or bl.replace(" ", "") in low):
+            return True
+        if len(compact) >= 12 and compact[:12] in low_nodash:
+            return True
+        bare = bare_uuid(bl)
+        if bare and bare.replace("-", "")[:12] in low_nodash:
+            return True
+        sq = _squash(bl)
+        if len(sq) >= 12 and sq in low_squash:
+            return True
+    return False
 
 
 def search_palette_ok(shot: Path, expected_name: str, extra: str | None = None) -> None:
@@ -981,42 +1138,7 @@ def search_palette_ok(shot: Path, expected_name: str, extra: str | None = None) 
     tmp = shot.with_name(shot.stem + "-palette.png")
     crop.save(tmp)
     text = ocr_image(tmp)
-    low = text.lower().replace(" ", "")
-    name = expected_name.strip()
-    token = name.lower()
-    bits = [token] if len(token) <= 16 else [token, " ".join(token.split()[:2])]
-    if extra:
-        bits.append(extra.strip())
-        bits.append(extra.strip()[:20])
-    found = False
-
-    def _squash(s: str) -> str:
-        # OCR путает 1/l/i и 0/o и теряет дефис в имени.
-        s = re.sub(r"[^0-9a-zа-яё]", "", s.lower())
-        return s.translate(str.maketrans("1l0", "iio"))
-
-    low_nodash = low.replace("-", "")
-    low_squash = _squash(text)
-    for b in bits:
-        if not b:
-            continue
-        bl = b.lower()
-        if bl in text.lower() or bl.replace(" ", "") in low:
-            found = True
-            break
-        # OCR часто рвёт uuid и читает префикс bc как «be».
-        compact = bl.replace("-", "")
-        if len(compact) >= 12 and compact[:12] in low_nodash:
-            found = True
-            break
-        bare = bare_uuid(bl)
-        if bare and bare.replace("-", "")[:12] in low_nodash:
-            found = True
-            break
-        sq = _squash(bl)
-        if len(sq) >= 5 and sq in low_squash:
-            found = True
-            break
+    found = palette_text_confirms(text, expected_name, extra)
     if not found:
         raise SystemExit(
             "Search Agents не показал сессию "
@@ -1661,12 +1783,8 @@ def main(argv: list[str]) -> int:
         tmp = shot.with_name(shot.stem + "-palopen.png")
         im.crop((int(w * 0.28), 0, int(w * 0.72), int(h * 0.72))).save(tmp)
         words = ocr_words(tmp)
-        low = " ".join(t for *_rest, t in words).lower()
-        hits = sum(t in low for t in ("search agents", "projects", "actions", "settings"))
-        # 3.30 (14.11.2026): палитра называется «Search chats…», вкладки All/Chats/Files.
-        if "search chats" in low or ("chats" in low and "files" in low):
-            return 0
-        return 0 if ("search agents" in low or hits >= 3) else 1
+        low = " ".join(t for *_rest, t in words)
+        return 0 if palette_is_open(low) else 1
     if cmd == "composer-pos":
         # Где поле ввода на снимке окна glass (0,0 1920x1080): «x y» или код 1.
         # Новый чат — якорь plan-idea (кнопка Idea, поле ~90 px выше).
@@ -1675,23 +1793,11 @@ def main(argv: list[str]) -> int:
         #   «@ host» пропал; поле ввода — по плейсхолдеру «Send follow-up»
         #   (якорь send-follow-up, Cursor 3.30).
         shot, host = Path(argv[2]), argv[3]
-        words = ocr_words(shot)
-        hit = find_anchor(words, "plan-idea")
-        if hit:
-            print(hit[0], hit[1])
-            return 0
-        for x, y, w, h, _c, t in words:
-            # x поля — от футера, не 960: при открытой правой панели (Changes)
-            # колонка чата уезжает влево (футер x≈320 вместо ≈690), замер 07.10.2026.
-            if host in t and y > 1000 and x > 260:
-                print(x + 250, y - 38)
-                return 0
-        # 3.30: нет «@ host» в футере — поле по плейсхолдеру Send follow-up.
-        hit = find_anchor(words, "send-follow-up")
-        if hit:
-            print(hit[0], hit[1])
-            return 0
-        return 1
+        hit = composer_click(ocr_words(shot), host)
+        if not hit:
+            return 1
+        print(hit[0], hit[1])
+        return 0
     if cmd == "anchor":
         # anchor SHOT имя-якоря → «x y» или код 1
         shot, name = Path(argv[2]), argv[3]
@@ -1803,20 +1909,17 @@ def main(argv: list[str]) -> int:
         return 1
     if cmd == "archive-pos":
         # Клик Archive в контекстном меню сайдбара, не «Archive All Below».
-        shot = Path(argv[2])
-        words = ocr_words(shot)
-        below_ys = [y for _, y, _w, _h, _c, t in words if t.lower() == "below"]
-        hits = [
-            (x, y, w, h)
-            for x, y, w, h, _c, t in words
-            if t.lower() == "archive"
-            and all(abs(y - by) > 12 for by in below_ys)
-        ]
-        if not hits:
+        hit = archive_menu_click(ocr_words(Path(argv[2])))
+        if not hit:
             return 1
-        x, y, w, h = hits[0]
-        print(x + w // 2, y + h // 2)
+        print(hit[0], hit[1])
         return 0
+    if cmd == "row-name":
+        # row-name SHOT Y ИМЯ → 0, если имя есть в этой строке сайдбара.
+        shot = Path(argv[2])
+        y = int(argv[3])
+        name = argv[4]
+        return 0 if sidebar_row_matches(ocr_words(shot), y, name) else 1
     if cmd == "convert-ok":
         # convert-ok UUID /ABS/WS → 0 local-rc этой папки, 1 нет в sqlite,
         # 2 есть (часто промежуточный environment), ещё не local-rc.

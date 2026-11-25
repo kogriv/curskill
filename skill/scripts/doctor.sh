@@ -174,11 +174,20 @@ if [ -z "$PROXY_URL" ] && [ -n "${SH_PATH:-}" ]; then
   PROXY_URL=$(sed -n 's/^PROXY_HTTP="\${CURSOR_STAND_PROXY:-\(.*\)}"$/\1/p' "$SH_PATH" | head -1)
 fi
 if [ -n "$PROXY_URL" ]; then
-  pport="${PROXY_URL##*:}"
-  if ss -ltn 2>/dev/null | grep -qE ":${pport}( |$)"; then
-    ok "proxy стенда $PROXY_URL слушает"
-  else
-    bad "proxy стенда $PROXY_URL не слушает — up откажется"
+  pport=$(python3 - "$PROXY_URL" <<'PY'
+import sys
+from urllib.parse import urlparse
+u = urlparse(sys.argv[1])
+if u.port:
+    print(u.port)
+    raise SystemExit(0)
+raise SystemExit(1)
+PY
+  ) || { bad "прокси задан, порт из URL не разобран"; pport=""; }
+  if [ -n "$pport" ] && ss -ltn 2>/dev/null | grep -qE ":${pport}( |$)"; then
+    ok "proxy стенда порт $pport слушает"
+  elif [ -n "$pport" ]; then
+    bad "proxy стенда порт $pport не слушает — up откажется"
   fi
 else
   ok "прокси не задан — up не требует порт"

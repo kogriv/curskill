@@ -158,10 +158,10 @@ The table is in `glass_agents.py` (`ANCHORS`). `anchor SHOT name` prints
 | `new-chat` | New, Chat | 0,0,260,130 |
 | `folder-chip` | main (click to the left). If main is absent, the folder name to the left of This Computer in the new-chat chip | 700,450,1100,520 |
 | `folder-search` | repos | 740,490,1100,545 |
-| `folder-result` | main + offset | only when Recents is absent |
+| `folder-result` | a visible result row under the chip. No row, no click | only when Recents is absent |
 | `env-this-computer` | This, Computer | 880,450,1200,530 |
 | `env-self-hosted` | Worker (the chip is a stop) | 880,450,1300,530 |
-| `composer-pos` | Idea / footer hostname | from the shot |
+| `composer-pos` | footer or follow-up when the thread is open; Idea only on a new chat | from the shot |
 | `footer-this-computer` | This, Computer | 400,1035,1100,1080 |
 | `send-follow-up` | follow | 400,990,1100,1045 |
 | `convert-self-hosted` | Worker (the Continue on menu) | 500,990,1300,1065 |
@@ -295,20 +295,37 @@ park→up). Do not park yourself unless asked.
 (open a tab for each folder `@ hostname`). If the workers are dead while
 Cursor is alive, it restarts the GUI at most once in 30 minutes
 (`var/last-restart`), without `hold`, and only when no agent is running
-(`glass.sh busy`): a restart cuts that turn. A worker that comes up
+(`glass.sh busy`): a restart cuts that turn. `ensure` reads `busy` again
+on a new shot immediately before the signal. A worker that comes up
 resumes an agent with an unfinished turn (on 2026-10-07 that revived
 "Greeting conversation"). After `workers`, check `busy`.
 
 ## Secrets
 
 A worker command line contains `--api-key`. Cut it out of replies, git,
-the skill, and chat screenshots. Sidebar shots contain session names. Do
-not put them in the repo (`$PROFILE/var/shots/`). Glass login credentials
-do not go in git.
+the skill, and chat screenshots. The launcher patch moves that flag into
+`CURSOR_API_KEY` and drops it from argv. If `CURSOR_API_KEY` is already
+set to a different value, the launcher exits and does not print either
+value. A worker that is already running keeps its old argv until Cursor
+starts it again. Sidebar shots contain session names. Do not put them in
+the repo (`$PROFILE/var/shots/`). Glass login credentials do not go in git.
+The login `xdg-open` log records the call, not the URL. The login Chrome
+does not open a DevTools port.
 
 ## Proxy
 
-An empty `CURSOR_STAND_PROXY` means `up` does not require a proxy. If it
-is set and it is localhost, `up` checks that the port is listening. The
-port number lives in `config/hosts/<host>.env`, not in the script. Do not
+An empty `CURSOR_STAND_PROXY` means `up` does not require a proxy, and
+`cursor-proxy` starts Cursor with no `--proxy-server`. If it is set and
+the host is localhost, `up` checks that the port is listening. The parser
+is the URL parser: `user:pass@127.0.0.1` stays localhost. Doctor prints
+the port, not the URL. When a proxy is set, the URL still has to sit in
+Cursor's argv; that is the residual risk, and it is not printed. The port
+number lives in `config/hosts/<host>.env`, not in the script. Do not
 substitute someone else's port without `ss`.
+
+`archive` refuses before any click when both `ARCHIVE_PROTECTED_IDS` and
+`ARCHIVE_PROTECTED_NAMES` are empty. A session with `status=1` is refused
+first. VNC stays on localhost. The password file is `$PROFILE/var/vnc.pass`,
+mode `0600`, created when `up` starts x11vnc. The password is not printed
+and not stored in git. An x11vnc that is already listening is left until
+the port is free.
