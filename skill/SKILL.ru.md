@@ -26,6 +26,63 @@ Cloud Agents — **другие** сессии. Клики по столу вл�
 
 Это оркестратор сессий Cursor Agents Window на Linux и X11. Не Windows, не macOS, не Wayland.
 
+## Как это устроено
+
+Стол владельца и стенд не делят мышь.
+
+```mermaid
+flowchart TB
+  subgraph owner ["Стол владельца, DISPLAY :1"]
+    desk[Клавиатура и мышь]
+  end
+  subgraph stand ["Стенд, DISPLAY :105"]
+    x11[X-сервер]
+    glass["Cursor Agents, 1920x1080 в 0,0"]
+    vnc[x11vnc только на localhost]
+  end
+  cloud["Облако Cursor: модель чата"]
+  worker[Свой воркер на этой машине]
+  desk -.->|только замер, кликов нет| glass
+  x11 --> glass
+  glass --> vnc
+  glass -->|Remote Control| worker
+  cloud --- glass
+  worker --> files[Папка проекта на этом диске]
+```
+
+Чем рисовать окно — необязательный выбор. Клики и проверка успеха те же.
+
+Cursor Agents — окно Electron, его должен кто-то нарисовать. Xvfb рисует процессором, llvmpipe или SwiftShader, около 0,6 ядра, пока окно живёт. Это целый стенд: тот же OCR, тот же handoff, без root, и видеокарта, за которой может сидеть человек, не трогается. NVIDIA Xorg рисует то же окно на карте. Поэтому стенд, который оставляют на весь день, берёт карту, когда может: процессор освобождается, сессия не меняется. Карту берут только для NVIDIA, только если Xorg стартует без пароля и только если у монитора никого нет. AMD и Intel не сделаны. `CURSOR_STAND_X=xvfb` специально обходит карту. `auto` берёт её, когда все части на месте, иначе говорит об этом и берёт Xvfb. `xorg` значит карта или отказ, не тихий откат.
+
+```mermaid
+flowchart TD
+  choice[CURSOR_STAND_X]
+  choice --> auto[auto]
+  choice --> xorg[xorg]
+  choice --> xvfb[xvfb]
+  auto --> have{Драйвер NVIDIA, Xorg, конфиг, passwordless sudo}
+  have -->|да| gpu[GPU Xorg, необязательно]
+  have -->|нет| soft[Xvfb]
+  xorg --> have2{те же проверки}
+  have2 -->|да| gpu
+  have2 -->|нет| stop[отказ, на Xvfb не прятаться]
+  xvfb --> soft
+```
+
+Новая сессия — одна последовательность. Картинка со словами «This Computer» — не её конец.
+
+```mermaid
+flowchart TD
+  start["handoff -w /абсолютная/папка --then задача"]
+  start --> ready[Короткое первое сообщение]
+  ready --> wait[Ждать конца этого хода]
+  wait --> conv["Футер: This Computer, затем Self-Hosted Worker"]
+  conv --> task[Вставить задачу вторым сообщением]
+  task --> ok{"класс local-rc, эта папка, воркер этого хоста"}
+  ok -->|да| done[Готово]
+  ok -->|"environment или /workspace"| halt[Стоп. Те же клики не повторять]
+```
+
 **Новая машина.** Сначала [SETUP.ru.md](../SETUP.ru.md): требования, файл хоста,
 согласие человека. `scripts/setup.sh` только проверяет команды и ничего не
 ставит. Пока в файле хоста нет `CURSKILL_SETUP_DONE=1`, `doctor` по glass
@@ -116,7 +173,7 @@ Return, читай [reference.ru.md](reference.ru.md).
 Текст на стенд: не `xdotool type` (IBus молчит). Скрипт —
 `xclip -display $DISP` + ctrl+v.
 
-## Экран и рендер (обязательно)
+## Экран и рендер
 
 Стенд — **второй X-сервер**, не окно на столе владельца.
 
@@ -137,9 +194,9 @@ Return, читай [reference.ru.md](reference.ru.md).
 | `xorg` | только GPU Xorg, иначе отказ (тихого Xvfb нет) |
 | `xvfb` | сразу программный рендер |
 
-GPU-ветка — **только NVIDIA** (`nvidia_drv.so`). AMD/Intel iGPU / Wayland
-не реализованы. Xvfb: ~0,6 ядра и SwiftShader/llvmpipe у Electron —
-допустимый откат, не «тот же стенд по качеству».
+Видеокарта необязательна. Зачем она и когда её не брать — в
+[Как это устроено](#как-это-устроено). Таблица ниже только переключатель.
+Только NVIDIA. AMD, Intel и Wayland не сделаны.
 
 Не поднимай второй Xorg на той же карте, пока человек за физическим
 монитором: экран может моргнуть. Если `:1` недоступен, изоляцию мыши

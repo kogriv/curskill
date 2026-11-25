@@ -47,6 +47,17 @@ owner at the desk moved it.
 
 ## What draws it: GPU Xorg or Xvfb
 
+The GPU is optional. Both paths paint one Cursor Agents window at
+1920×1080, and handoff does not care which one it was.
+
+Xvfb paints that window on the CPU (llvmpipe / SwiftShader), about 0.6 of
+a core while the window stays up. No root, and it never opens a second
+Xorg on a card a person is watching. That is enough for a real session.
+NVIDIA Xorg paints the same window on the card, so a stand that is left
+up (the timer brings it back) does not keep paying that CPU. Take the GPU
+when the card is NVIDIA, Xorg starts without a password, and nobody is at
+that monitor. Otherwise stay on Xvfb. AMD and Intel are not implemented.
+
 `CURSOR_STAND_X` is `auto`, `xorg`, or `xvfb`. The default is `auto`.
 This is the current scheme. The skill does not ask in chat: leave
 `auto`, or the person explicitly asks for `xorg` or `xvfb`. Before `up`:
@@ -77,8 +88,9 @@ is required (a measurement, or the person said "the card only").
 ### `xvfb`
 
 Straight to `Xvfb :105 -screen 0 1920x1080x24`. Root is not required.
-Electron uses software rendering. Fine for one session on a machine
-without NVIDIA. Not fine for steady work on a living NVIDIA card.
+Electron uses software rendering. This is a full stand, including one
+left up. On a machine with a free NVIDIA card the GPU path is how you
+avoid the CPU cost. It is not required.
 
 There is no AMD branch, no Intel branch, no CUDA branch, no "second
 monitor" branch. There is no "a window on `:1` if the GPU is busy".

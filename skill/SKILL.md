@@ -33,6 +33,63 @@ screenshot.
 This is the orchestrator for Cursor Agents Window sessions on Linux and
 X11. Not Windows, not macOS, not Wayland.
 
+## How it is put together
+
+The owner's desktop and the stand do not share a mouse.
+
+```mermaid
+flowchart TB
+  subgraph owner ["Owner desktop, DISPLAY :1"]
+    desk[Keyboard and mouse]
+  end
+  subgraph stand ["Stand, DISPLAY :105"]
+    x11[X server]
+    glass["Cursor Agents, 1920x1080 at 0,0"]
+    vnc[x11vnc on localhost only]
+  end
+  cloud["Cursor cloud: the chat model"]
+  worker[Private worker on this machine]
+  desk -.->|measured, never clicked| glass
+  x11 --> glass
+  glass --> vnc
+  glass -->|Remote Control| worker
+  cloud --- glass
+  worker --> files[The project folder on this disk]
+```
+
+What paints the window is optional. The clicks and the success check stay the same.
+
+Cursor Agents is an Electron window, so something has to paint it. Xvfb paints it on the CPU, llvmpipe or SwiftShader, about 0.6 of a core for as long as the window is up. That is a whole stand: the same OCR, the same handoff, no root, and it does not touch a GPU a person may be watching. NVIDIA Xorg paints that same window on the card, which is why a stand left up all day uses the card when it can: the CPU cost goes away, the session does not. Use the GPU only for NVIDIA, only when Xorg can start without a password, and only when nobody is at that monitor. AMD and Intel are not implemented. `CURSOR_STAND_X=xvfb` skips the GPU on purpose. `auto` takes it when those pieces are present and otherwise says so and uses Xvfb. `xorg` means the GPU or a refusal, not a quiet fallback.
+
+```mermaid
+flowchart TD
+  choice[CURSOR_STAND_X]
+  choice --> auto[auto]
+  choice --> xorg[xorg]
+  choice --> xvfb[xvfb]
+  auto --> have{NVIDIA driver, Xorg, config, passwordless sudo}
+  have -->|yes| gpu[GPU Xorg, optional]
+  have -->|no| soft[Xvfb]
+  xorg --> have2{same checks}
+  have2 -->|yes| gpu
+  have2 -->|no| stop[refuse, do not hide on Xvfb]
+  xvfb --> soft
+```
+
+A new session is one sequence. A picture of the words "This Computer" is not the end of it.
+
+```mermaid
+flowchart TD
+  start["handoff -w /absolute/folder --then task"]
+  start --> ready[Short first message]
+  ready --> wait[Wait until that turn ends]
+  wait --> conv["Footer: This Computer, then Self-Hosted Worker"]
+  conv --> task[Paste the task as the second message]
+  task --> ok{"class local-rc, this folder, worker at this host"}
+  ok -->|yes| done[Done]
+  ok -->|"environment or /workspace"| halt[Stop. Do not repeat the same clicks]
+```
+
 **A new machine.** Read [SETUP.md](../SETUP.md) first: requirements, the
 host file, the person's yes. `scripts/setup.sh` only checks commands and
 installs nothing. Until the host file has `CURSKILL_SETUP_DONE=1`,
@@ -125,7 +182,7 @@ unrecognized anchor is a refusal before Return. Read
 Text onto the stand: not `xdotool type` (IBus stays silent). The script
 uses `xclip -display $DISP` plus ctrl+v.
 
-## Screen and rendering (required)
+## Screen and rendering
 
 The stand is a **second X server**, not a window on the owner's desktop.
 
@@ -147,10 +204,9 @@ not an interview in chat. Before the first `up` on a host:
 | `xorg` | GPU Xorg only, otherwise a refusal (no quiet Xvfb) |
 | `xvfb` | software rendering immediately |
 
-The GPU branch is **NVIDIA only** (`nvidia_drv.so`). AMD, Intel iGPU, and
-Wayland are not implemented. Xvfb costs about 0.6 of a core and Electron
-on SwiftShader/llvmpipe. That is an acceptable fallback, not "the same
-stand".
+The GPU is optional. Why it is worth having, and when to skip it, is in
+[How it is put together](#how-it-is-put-together). This table is only the
+switch. NVIDIA only. AMD, Intel, and Wayland are not implemented.
 
 Do not raise a second Xorg on the same card while a person is at the
 physical monitor: the screen can blink. If `:1` is unreachable, mouse

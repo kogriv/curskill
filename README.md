@@ -41,10 +41,19 @@ One machine has one stand. Another agent is another tab, not another X
 server. A second Xorg on a GPU someone is watching can blink their
 monitor, so the stand is not brought up until a person says to.
 
+The GPU is optional. The stand has to paint a Cursor window somewhere.
+Xvfb paints it on the CPU and is a complete stand: same clicks, same
+check, no root. NVIDIA Xorg paints the same window on the card, so a
+stand that stays up does not spend that CPU. Skip the GPU when there is
+no NVIDIA, when sudo cannot start Xorg, or when a person is at that
+monitor. AMD and Intel are not implemented.
+
 ## Where it runs
 
-Linux and X11. The screen is NVIDIA Xorg on its own `DISPLAY`, or Xvfb
-when there is no such GPU. Choose with `CURSOR_STAND_X=auto|xorg|xvfb`.
+Linux and X11. `CURSOR_STAND_X=xvfb` is software rendering.
+`CURSOR_STAND_X=xorg` is NVIDIA or a refusal. `auto`, the default, uses
+the GPU only when the driver, Xorg, and passwordless sudo are all
+present, and otherwise says so and uses Xvfb.
 
 Not promised and not tested: AMD, Intel iGPU, Wayland, Windows, macOS.
 
