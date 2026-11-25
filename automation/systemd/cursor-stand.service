@@ -23,5 +23,6 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 KillMode=process
-ExecStart=/usr/bin/systemd-run --user --scope --quiet --collect %h/src/curskill/automation/cursor-stand.sh ensure
+# Замени /ABS/CLONE на каталог клона. install.sh этот путь не подставляет.
+ExecStart=/usr/bin/systemd-run --user --scope --quiet --collect /ABS/CLONE/automation/cursor-stand.sh ensure
 TimeoutStartSec=20min

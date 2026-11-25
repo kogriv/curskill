@@ -15,9 +15,10 @@ Linux и X11. Экран — NVIDIA Xorg на отдельном `DISPLAY` ил�
 
 ## Установка скилла
 
+Из корня клона:
+
 ```bash
-git clone <этот-репозиторий> "$HOME/src/curskill"
-"$HOME/src/curskill/install/install.sh"
+./install/install.sh
 ```
 
 Скрипт вешает симлинки:

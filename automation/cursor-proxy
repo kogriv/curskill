@@ -3,7 +3,8 @@
 set -eu
 
 if [ -z "${CURSOR_STAND_PROXY:-}" ]; then
-  _cfg="${CURSOR_STAND_CONFIG:-$HOME/src/curskill/config/hosts/$(hostname).env}"
+  _here=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+  _cfg="${CURSOR_STAND_CONFIG:-$_here/../config/hosts/$(hostname).env}"
   if [ -f "$_cfg" ]; then
     set -a
     # shellcheck disable=SC1090
