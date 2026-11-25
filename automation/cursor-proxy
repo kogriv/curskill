@@ -1,0 +1,44 @@
+#!/bin/sh
+# Точка входа Cursor с прокси. Порт не зашит: CURSOR_STAND_PROXY из config/hosts.
+set -eu
+
+if [ -z "${CURSOR_STAND_PROXY:-}" ]; then
+  _cfg="${CURSOR_STAND_CONFIG:-$HOME/src/curskill/config/hosts/$(hostname).env}"
+  if [ -f "$_cfg" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    . "$_cfg"
+    set +a
+  fi
+fi
+PROXY="${CURSOR_STAND_PROXY:-}"
+if [ -z "$PROXY" ]; then
+  echo "cursor-proxy: задай CURSOR_STAND_PROXY" >&2
+  exit 1
+fi
+
+export http_proxy="$PROXY"
+export https_proxy="$PROXY"
+export HTTP_PROXY="$PROXY"
+export HTTPS_PROXY="$PROXY"
+
+if [ -n "${CURSOR_STAND_SOCKS:-}" ]; then
+  export all_proxy="$CURSOR_STAND_SOCKS"
+  export ALL_PROXY="$CURSOR_STAND_SOCKS"
+fi
+
+NO_PROXY_VAL="${CURSOR_STAND_NO_PROXY:-localhost,127.0.0.1,::1}"
+export no_proxy="$NO_PROXY_VAL"
+export NO_PROXY="$NO_PROXY_VAL"
+export PROXY_PROFILE="${PROXY_PROFILE:-default}"
+
+CURSOR_BIN="/usr/share/cursor/cursor-bin"
+if [ ! -x "$CURSOR_BIN" ]; then
+  CURSOR_BIN="/usr/share/cursor/cursor"
+fi
+
+BYPASS=$(printf '%s' "$NO_PROXY_VAL" | tr ',' ';')
+exec "$CURSOR_BIN" \
+  --proxy-server="$PROXY" \
+  --proxy-bypass-list="<local>;${BYPASS}" \
+  "$@"

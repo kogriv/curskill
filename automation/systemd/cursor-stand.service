@@ -1,0 +1,27 @@
+# Стенд Cursor Agents Window (:105) + воркеры private worker этой машины.
+# Запускается таймером cursor-stand.timer (после загрузки и каждые 5 мин):
+#   cursor-stand.sh ensure = up, если экран/Cursor стенда не живы, + workers
+#   (для каждой папки с сессиями «@ <hostname>» открыть вкладку, чтобы Cursor поднял воркер).
+# Ставится (linger=yes) в пользовательский systemd:
+#   cp cursor-stand.service cursor-stand.timer ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user enable --now cursor-stand.timer
+# Сам юнит не enable — его зовёт таймер.
+# Остановить стенд надолго: cursor-stand.sh park|down (ставит метку var/hold — таймер
+# не поднимает); вернуть: cursor-stand.sh up.
+# ensure запускается в transient scope: Cursor, Xorg, openbox и x11vnc
+# остаются жить, но не числятся за этим oneshot и не шумят в journal.
+# Если задан CURSOR_STAND_PROXY, после загрузки порт может быть не готов —
+# up выходит с ошибкой, следующий тик таймера повторит.
+# install.sh этот юнит НЕ копирует. Подмена ExecStart в пользовательском
+# systemd — переключение живого стенда, только по отмашке владельца.
+# Запреты прежние: не pkill Xorg; путь воркспейса в argv up не передавать.
+[Unit]
+Description=Cursor stand :105 + private workers (cursor-stand.sh ensure)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+KillMode=process
+ExecStart=/usr/bin/systemd-run --user --scope --quiet --collect %h/src/curskill/automation/cursor-stand.sh ensure
+TimeoutStartSec=20min

@@ -1,0 +1,98 @@
+#!/bin/bash
+# Точечный root-helper Xorg стенда. Только дисплей из /etc/cursor-stand/display, иначе :105.
+# Не общий sudo ALL, не произвольный Xorg. Ставится в /usr/local/sbin/.
+set -euo pipefail
+
+DISP="${2:-${CURSOR_STAND_DISPLAY:-:105}}"
+TAG="${3:-cursor-stand}"
+# sudo стирает CURSOR_STAND_DISPLAY. Разрешённый номер — файл root, не окружение.
+# Нет файла — только :105. Строка :1 в файле пустила бы Xorg на стол, файл пишет root.
+ALLOW_FILE="${CURSKILL_XORG_ALLOW:-/etc/cursor-stand/display}"
+if [ -f "$ALLOW_FILE" ]; then
+  ALLOWED=$(tr -d ' \n' < "$ALLOW_FILE")
+else
+  ALLOWED=":105"
+fi
+case "$ALLOWED" in
+  :[0-9]|:[0-9][0-9]|:[0-9][0-9][0-9]|:[0-9][0-9][0-9][0-9]) ;;
+  *) echo "curskill-xorg: в $ALLOW_FILE ждём :N, там '$ALLOWED'" >&2; exit 2 ;;
+esac
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -n "${CURSKILL_XORG_CONF:-}" ]; then
+  CONF_SRC="$CURSKILL_XORG_CONF"
+elif [ -f "$SCRIPT_DIR/display/xorg-nvidia-headless.conf" ]; then
+  CONF_SRC="$SCRIPT_DIR/display/xorg-nvidia-headless.conf"
+elif [ -f "$SCRIPT_DIR/../display/xorg-nvidia-headless.conf" ]; then
+  CONF_SRC="$SCRIPT_DIR/../display/xorg-nvidia-headless.conf"
+elif [ -f /usr/local/share/cursor-stand/xorg-nvidia-headless.conf ]; then
+  CONF_SRC=/usr/local/share/cursor-stand/xorg-nvidia-headless.conf
+else
+  echo "curskill-xorg: задай CURSKILL_XORG_CONF" >&2
+  exit 1
+fi
+RUNTIME_CONF="/tmp/curskill-xorg-nvidia-headless.conf"
+EMPTY_DIR="/tmp/xorg-empty-confdir"
+LOCK="/tmp/.X${DISP#:}-lock"
+
+if [ "$DISP" != "$ALLOWED" ]; then
+  echo "curskill-xorg: разрешён только $ALLOWED, дали $DISP" >&2
+  exit 2
+fi
+
+nvidia_busid() {
+  local slot
+  slot=$(lspci -d 10de: 2>/dev/null | awk '/VGA compatible|3D controller/{print $1; exit}')
+  [ -n "$slot" ] || { echo "curskill-xorg: нет NVIDIA VGA в lspci" >&2; exit 1; }
+  python3 - "$slot" <<'PY'
+import sys
+slot = sys.argv[1].split()[0]
+# 07:00.0 → PCI:7:0:0 (Xorg хочет десятичные)
+bus, rest = slot.split(":", 1)
+dev, func = rest.split(".")
+print("PCI:%d:%d:%d" % (int(bus, 16), int(dev, 16), int(func, 16)))
+PY
+}
+
+write_runtime_conf() {
+  local busid
+  busid=$(nvidia_busid)
+  [ -f "$CONF_SRC" ] || { echo "нет $CONF_SRC" >&2; exit 1; }
+  sed -E "s/BusID[[:space:]]+\"PCI:[0-9]+:[0-9]+:[0-9]+\"/BusID      \"$busid\"/" \
+    "$CONF_SRC" > "$RUNTIME_CONF"
+  echo "curskill-xorg: BusID $busid → $RUNTIME_CONF" >&2
+}
+
+case "${1:-}" in
+  print-conf)
+    echo "$CONF_SRC"
+    ;;
+  start)
+    write_runtime_conf
+    mkdir -p "$EMPTY_DIR"
+    num="${DISP#:}"
+    rm -f "/tmp/.X${num}-lock" "/tmp/.X11-unix/X${num}" 2>/dev/null || true
+    exec /usr/bin/Xorg "$DISP" -config "$RUNTIME_CONF" -configdir "$EMPTY_DIR" \
+      -sharevts -novtswitch -noreset -nolisten tcp \
+      -logfile "/tmp/xorg-${TAG}.log"
+    ;;
+  stop)
+    pid=$(tr -d ' \n' < "$LOCK" 2>/dev/null || true)
+    case "$pid" in
+      ''|*[!0-9]*) echo "curskill-xorg: нет PID в $LOCK" >&2; exit 0 ;;
+    esac
+    cmd=$(ps -o args= -p "$pid" 2>/dev/null || true)
+    case "$cmd" in
+      *"$DISP "*|*"$DISP")
+        kill "$pid"
+        sleep 1
+        rm -f "$LOCK"
+        ;;
+      "") echo "curskill-xorg: pid $pid уже нет" >&2 ;;
+      *) echo "curskill-xorg: pid $pid не экран $DISP ($cmd)" >&2; exit 1 ;;
+    esac
+    ;;
+  *)
+    echo "usage: curskill-xorg start|:stop :105 [tag]" >&2
+    exit 2
+    ;;
+esac

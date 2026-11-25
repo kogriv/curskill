@@ -1,0 +1,12 @@
+# Поднимать стенд Cursor и воркеры после загрузки и чинить после падений.
+# См. cursor-stand.service.
+[Unit]
+Description=Cursor stand :105 + workers: ensure after boot and every 5 min
+
+[Timer]
+OnStartupSec=90s
+OnUnitInactiveSec=5min
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

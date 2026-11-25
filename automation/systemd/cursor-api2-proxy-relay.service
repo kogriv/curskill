@@ -1,0 +1,18 @@
+[Unit]
+Description=Cursor API2 TLS relay through local Xray HTTP proxy
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Порт фермы сюда не зашит. Drop-in: Environment=CURSOR_STAND_PROXY_PORT=…
+# Не копировать поверх живого юнита в /etc: там порт хоста уже в ExecStart.
+# Порт 0 или пустой — не стартовать (иначе socat уйдёт в никуда).
+Environment=CURSOR_STAND_PROXY_PORT=0
+ExecStartPre=/bin/sh -c '[ -n "$CURSOR_STAND_PROXY_PORT" ] && [ "$CURSOR_STAND_PROXY_PORT" != 0 ]'
+ExecStart=/usr/bin/socat TCP4-LISTEN:443,bind=127.0.0.3,reuseaddr,fork PROXY:127.0.0.1:api2.cursor.sh:443,proxyport=${CURSOR_STAND_PROXY_PORT}
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

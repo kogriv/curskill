@@ -1,0 +1,11 @@
+{
+    "http.proxy": "http://127.0.0.1:0",
+    "http.proxySupport": "on",
+    "terminal.integrated.inheritEnv": true,
+    "terminal.integrated.env.linux": {
+        "http_proxy": "http://127.0.0.1:0",
+        "https_proxy": "http://127.0.0.1:0",
+        "HTTP_PROXY": "http://127.0.0.1:0",
+        "HTTPS_PROXY": "http://127.0.0.1:0"
+    }
+}
