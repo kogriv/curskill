@@ -17,219 +17,242 @@ description: >-
 
 # Curskill (Agents Window + Remote Control)
 
-Штатного API «новая вкладка glass + `/remote-control`» нет. CLI `agent` и
-Cloud Agents — **другие** сессии. Клики по столу владельца запрещены
-(ADR-0007). Рабочий путь: computer-use на **своём** DISPLAY.
+Russian: [SKILL.ru.md](SKILL.ru.md). English is the copy the agent follows.
 
-Это оркестратор сессий Cursor Agents Window на Linux и X11. Не Windows, не macOS, не Wayland.
+There is no API for "a new glass tab plus `/remote-control`". The `agent`
+CLI and Cloud Agents are **other** sessions. Do not click the owner's
+desktop. The working path is computer use on **this stand's** DISPLAY.
 
-**Новая машина.** Сначала [SETUP.md](../SETUP.md): требования, файл хоста,
-согласие человека. `scripts/setup.sh` только проверяет команды и ничего не
-ставит. Пока в файле хоста нет `CURSKILL_SETUP_DONE=1`, `doctor` по glass
-не кликает. `up` и таймер — после фразы человека «поднимай».
+Why that display exists: [README.md](../README.md). In short, Remote
+Control on this machine is a desktop Agents window whose tools run here
+as a private worker. The script raises a second X11 server so those clicks
+do not move the owner's mouse, and it repeats a UI sequence that has no
+stable API. Success is a `local-rc` row in the stand profile, not a
+screenshot.
 
-**Перед любой работой на уже настроенном стенде** перечитай этот `SKILL.md`
-с диска и запусти `scripts/doctor.sh`. На свободном живом стенде при
-`CURSKILL_SETUP_DONE=1` doctor кликает `handoff --dry-run` (без Return и
-без текста). Занятый стенд он не кликает. Экран — [display.md](display.md),
-хосты — [hosts.md](hosts.md), отказы — [reference.md](reference.md).
+This is the orchestrator for Cursor Agents Window sessions on Linux and
+X11. Not Windows, not macOS, not Wayland.
 
-## Кто читает этот скилл
+**A new machine.** Read [SETUP.md](../SETUP.md) first: requirements, the
+host file, the person's yes. `scripts/setup.sh` only checks commands and
+installs nothing. Until the host file has `CURSKILL_SETUP_DONE=1`,
+`doctor` does not click the glass UI. `up` and the timer wait until the
+person says to bring the stand up.
 
-Одна копия на двух агентов: Cursor берёт `.cursor/skills/curskill/`,
-Claude Code — `.claude/skills/curskill` (симлинк на неё же). Всё ниже
-этого раздела общее; различия — только здесь.
+**Before any work on a stand that is already set up,** re-read this
+`SKILL.md` from disk and run `scripts/doctor.sh`. On a free living stand
+with `CURSKILL_SETUP_DONE=1`, doctor clicks `handoff --dry-run` (no Return
+and no text). It does not click a busy stand. Screen:
+[display.md](display.md). Hosts: [hosts.md](hosts.md). Failures:
+[reference.md](reference.md).
 
-| | агент Cursor (glass / RC на стенде) | Claude Code (tmux на хосте) |
+## Who reads this skill
+
+One copy, two agents. Cursor loads `.cursor/skills/curskill/`. Claude Code
+loads `.claude/skills/curskill` (a symlink to the same directory).
+Everything below this section is shared. The differences are only here.
+
+| | Cursor agent (glass / RC on the stand) | Claude Code (tmux on the host) |
 |---|---|---|
-| где лежит | `skill/` репо `curskill`; `install/install.sh` вешает `~/.cursor/skills/curskill` | тот же `skill/` через `~/.claude/skills/curskill` |
-| как подхватить | новый чат в папке, где скилл установлен; явно `/curskill` | новая или перезапущенная сессия; явно `/curskill` |
-| проверить, что виден | Customize → Skills | скилл в списке сессии; `/curskill` не «Unknown skill» |
-| чем опасны `park`, `ensure`, перезапуск Cursor стенда | **убьёшь себя**: твой воркер — процесс этого Cursor, ход оборвётся | убьёшь **чужих** работающих агентов: сначала `scripts/glass.sh busy "$(hostname)"` |
-| `DISPLAY` по умолчанию | часто `:105` (стенд) | пусто или `:1` (стол владельца) — всегда явно `DISPLAY=` стенда |
-| кто твой воркер | `--worker-dir` твоей папки `@ <hostname>` из профиля стенда | воркеров нет; ты не в `glass.sh mine` |
+| where it lives | `skill/` of the `curskill` repo; `install/install.sh` links `~/.cursor/skills/curskill` | the same `skill/` via `~/.claude/skills/curskill` |
+| how it is picked up | a new chat in a folder where the skill is installed; or `/curskill` | a new or restarted session; or `/curskill` |
+| how to see that it is visible | Customize → Skills | the skill is in the session list; `/curskill` is not "Unknown skill" |
+| why `park`, `ensure`, and a stand restart are dangerous | **you kill yourself**: your worker is a process of this Cursor, and the turn stops | you kill **other** running agents: first `scripts/glass.sh busy "$(hostname)"` |
+| default `DISPLAY` | often `:105` (the stand) | empty or `:1` (the owner's desktop) — always set `DISPLAY=` to the stand |
+| who your worker is | `--worker-dir` of your folder `@ <hostname>` from the stand profile | you have no workers; you are not in `glass.sh mine` |
 
-Общее для обоих:
+Shared:
 
-- Канон скриптов — `automation/cursor-stand.sh` в том же репо, рядом с
-  `skill/`. Ставит `install/install.sh`: симлинки
-  `~/.cursor/skills/curskill` и `~/.claude/skills/curskill` на `skill/`.
-  `install/install.sh` вешает только симлинки скилла. Таймер стенда и
-  уже запущенный экран он не переключает.
-- Сессия в воркспейсе без установленного скилла его не подхватит.
-- Автовызов включён (`disable-model-invocation` нет): description должен
-  сработать на «поднять агента / RC / rename / MCP».
-- Наблюдения, не проверенные документацией Cursor (07.10.2026): RC /
-  self-hosted worker не видит `~/.cursor/skills/`; чат, начатый до появления
-  скилла, его не подхватывает.
+- The script canon is `automation/cursor-stand.sh` in the same repo, next
+  to `skill/`. `install/install.sh` links `~/.cursor/skills/curskill` and
+  `~/.claude/skills/curskill` at `skill/`. It links the skill only. It does
+  not switch the stand timer or a screen that is already up.
+- A session in a workspace where the skill is not installed will not see it.
+- Auto-invocation is on (no `disable-model-invocation`): the description
+  should match "raise an agent / RC / rename / MCP".
+- Observed, not confirmed by Cursor's docs (2026-10-07): an RC /
+  self-hosted worker does not see `~/.cursor/skills/`. A chat started
+  before the skill appeared does not pick it up.
 
-## Скрипты — вызывать, не переписывать
+## Call the scripts, do not rewrite them
 
-Канон (git): `automation/cursor-stand.sh`, `glass_agents.py`.
-Экран **не копировать** в skill: свой
-`automation/display/stand-display.sh`. Другой скрипт экрана задаётся
+Canon (git): `automation/cursor-stand.sh`, `glass_agents.py`.
+Do **not** copy the screen script into the skill. It is
+`automation/display/stand-display.sh`. Another screen script is
 `CURSOR_STAND_DISPLAY_SH`.
 
-Пути ниже — от корня этого скилла. `scripts/stand.sh` резолвит канон
-(`CURSOR_STAND_SH=` если надо).
+Paths below are from this skill's root. `scripts/stand.sh` resolves the
+canon (`CURSOR_STAND_SH=` if you must).
 
 ```bash
 scripts/doctor.sh
 scripts/pick-display.sh
 scripts/stand.sh status
-scripts/stand.sh up                          # без пути папки в argv
-scripts/stand.sh workers                     # воркеры папок @ этой машины
-scripts/stand.sh ensure                      # то, что делает таймер; руками — по просьбе
-scripts/stand.sh handoff -w /ABS/PROJECT -n имя --then 'задача'
-scripts/stand.sh handoff -w /ABS --no-convert   # локальный чат; потом convert
-scripts/stand.sh convert --id <uuid|bc-|имя> [-w /ABS] [-n имя]
+scripts/stand.sh up                          # no folder path in argv
+scripts/stand.sh workers                     # folder workers @ this machine
+scripts/stand.sh ensure                      # what the timer does; by hand only when asked
+scripts/stand.sh handoff -w /ABS/PROJECT -n name --then 'task'
+scripts/stand.sh handoff -w /ABS --no-convert   # local chat; convert later
+scripts/stand.sh convert --id <uuid|bc-|name> [-w /ABS] [-n name]
 scripts/stand.sh convert --id … --dry-run
 scripts/wait-worker.sh /ABS/PROJECT
-scripts/stand.sh composer-send --id bc-…     # resend; поле ввода — по снимку
-scripts/stand.sh rename --id bc-… имя
-scripts/stand.sh archive --id bc-…           # пробные/ошибочные; не выполняющуюся
+scripts/stand.sh composer-send --id bc-…     # resend; the input box is found on the shot
+scripts/stand.sh rename --id bc-… name
+scripts/stand.sh archive --id bc-…           # probes and mistakes; not a running one
 scripts/stand.sh mcp list                    # Customize → MCPs
 scripts/stand.sh mcp find NAME
-scripts/stand.sh mcp enable NAME             # тоггл источника ON
+scripts/stand.sh mcp enable NAME             # source toggle ON
 scripts/stand.sh mcp disable NAME
 scripts/stand.sh mcp add -w /ABS -n NAME --command /path [--arg …]
 scripts/stand.sh mcp add --user -n NAME --command /path
-scripts/stand.sh settings agents             # Settings → Agents, только чтение
+scripts/stand.sh settings agents             # Settings → Agents, read only
 scripts/stand.sh shot
 scripts/glass.sh selected
-scripts/glass.sh newest /ABS/PROJECT [since_ms]   # только class=local-rc
+scripts/glass.sh newest /ABS/PROJECT [since_ms]   # class=local-rc only
 scripts/glass.sh show bc-…
 scripts/glass.sh created-since <epoch_ms>
 scripts/glass.sh handoff-ok /ABS/PROJECT [since_ms [uuid]]
-scripts/glass.sh mine "$(hostname)"          # local-rc + local; колонка working
-scripts/glass.sh busy "$(hostname)"          # status=1 и локальный selected без записи
+scripts/glass.sh mine "$(hostname)"          # local-rc + local; working column
+scripts/glass.sh busy "$(hostname)"          # status=1, plus a local selected with no row
 ```
 
-Клики handoff / MCP — якоря OCR в `glass_agents.py`, не фиксированные точки.
-Не кликай `xdotool` с голоса, пока есть команда скрипта. После смены UI
-Cursor — `doctor` / `handoff --dry-run`; неузнанный якорь = отказ до
-Return, читай [reference.md](reference.md).
+Handoff and MCP clicks are OCR anchors in `glass_agents.py`, not fixed
+points. Do not click with `xdotool` from chat while a script command
+exists. After a Cursor UI change, run `doctor` / `handoff --dry-run`. An
+unrecognized anchor is a refusal before Return. Read
+[reference.md](reference.md).
 
-Текст на стенд: не `xdotool type` (IBus молчит). Скрипт —
-`xclip -display $DISP` + ctrl+v.
+Text onto the stand: not `xdotool type` (IBus stays silent). The script
+uses `xclip -display $DISP` plus ctrl+v.
 
-## Экран и рендер (обязательно)
+## Screen and rendering (required)
 
-Стенд — **второй X-сервер**, не окно на столе владельца.
+The stand is a **second X server**, not a window on the owner's desktop.
 
-| слой | что |
+| layer | what |
 |---|---|
-| Дисплей | `CURSOR_STAND_DISPLAY` дефолт `:105` |
-| Окно glass | на этом дисплее, `0,0` × `1920×1080` (`agents_window`) |
-| Просмотр | x11vnc `localhost:5916` (`-localhost`, без пароля на loopback) |
-| Стол | `CURSOR_STAND_ORIG_DISPLAY` дефолт `:1` — только замер мыши |
-| Клавиатура стола | не забирается: `AutoAddDevices off`, `-sharevts -novtswitch` |
+| Display | `CURSOR_STAND_DISPLAY`, default `:105` |
+| Glass window | on that display, `0,0` × `1920×1080` (`agents_window`) |
+| Viewing | x11vnc `localhost:5916` (`-localhost`, no password on loopback) |
+| Owner's desktop | `CURSOR_STAND_ORIG_DISPLAY`, default `:1` — mouse measurement only |
+| Owner's keyboard | not taken: `AutoAddDevices off`, `-sharevts -novtswitch` |
 
-Выбор **чем рисовать** — `CURSOR_STAND_X` (читает `stand-display.sh`), не
-интервью в чате. Перед первым `up` на хосте: `scripts/pick-display.sh`.
+What **draws** the screen is `CURSOR_STAND_X` (read by `stand-display.sh`),
+not an interview in chat. Before the first `up` on a host:
+`scripts/pick-display.sh`.
 
-| `CURSOR_STAND_X` | поведение |
+| `CURSOR_STAND_X` | behavior |
 |---|---|
-| `auto` (дефолт, текущая схема) | NVIDIA Xorg, если есть `nvidia_drv.so` + xorg-conf + `Xorg` + NOPASSWD/обёртка; иначе **громкий** откат на Xvfb |
-| `xorg` | только GPU Xorg, иначе отказ (тихого Xvfb нет) |
-| `xvfb` | сразу программный рендер |
+| `auto` (default) | NVIDIA Xorg when `nvidia_drv.so` + xorg config + `Xorg` + NOPASSWD/wrapper are all present; otherwise a **loud** fallback to Xvfb |
+| `xorg` | GPU Xorg only, otherwise a refusal (no quiet Xvfb) |
+| `xvfb` | software rendering immediately |
 
-GPU-ветка — **только NVIDIA** (`nvidia_drv.so`). AMD/Intel iGPU / Wayland
-не реализованы. Xvfb: ~0,6 ядра и SwiftShader/llvmpipe у Electron —
-допустимый откат, не «тот же стенд по качеству».
+The GPU branch is **NVIDIA only** (`nvidia_drv.so`). AMD, Intel iGPU, and
+Wayland are not implemented. Xvfb costs about 0.6 of a core and Electron
+on SwiftShader/llvmpipe. That is an acceptable fallback, not "the same
+stand".
 
-Не поднимай второй Xorg на той же карте, пока человек за физическим
-монитором: экран может моргнуть. Если `:1` недоступен, изоляцию мыши
-не измерить — это не запрет handoff.
+Do not raise a second Xorg on the same card while a person is at the
+physical monitor: the screen can blink. If `:1` is unreachable, mouse
+isolation cannot be measured. That does not forbid handoff.
 
-Живой `:105` `up` не дублирует (не второй Xorg). Калибровка прибита к `:105`.
+`up` does not duplicate a living `:105` (not a second Xorg). Calibration
+is pinned to `:105`.
 
-Полный разбор: [display.md](display.md).
+Full notes: [display.md](display.md).
 
-## Версия UI и ловушка Environment (07.10.2026)
+## UI version and the Environment trap (2026-10-07)
 
-Пакет, на котором сняты якоря: **3.30** (раньше 3.23). Запрета по
-номеру версии нет (BL-007): отказ — неузнанный якорь на снимке. Якоря handoff
-работают на 3.30 (синк 389fa7d); `composer-pos` получил 3.30-фолбэк по якорю
-`send-follow-up`, когда футер стал «This Computer (Self-Hosted Worker)» и
-«@ host» из него пропал. `CURSOR_STAND_UI_CALIBRATED`
-(дефолт 3.23, справка в `doctor` / `ui-checked`) пока не поднят до 3.30 —
-обновить при полной реверификации UI.
+Anchors were taken on package **3.30** (earlier 3.23). There is no refusal
+by version number: the refusal is an unrecognized anchor on the shot.
+Handoff anchors work on 3.30. `composer-pos` gained a 3.30 fallback on the
+`send-follow-up` anchor when the footer became "This Computer (Self-Hosted
+Worker)" and `@ host` disappeared from it. `CURSOR_STAND_UI_CALIBRATED`
+(default 3.23, reported by `doctor` / `ui-checked`) is not yet raised to
+3.30. Raise it after a full UI re-check.
 
-**Как получается local-rc на 3.23.** Return в новом чате даёт локальный
-uuid без `bc-`. **Задача — вторым сообщением** (`--then` / `--then-file`):
-первое короткое (дефолт READY), дождаться конца хода, конвертация, потом
-задача. Длинный промпт первым — агент стартует до convert и Cursor показывает
-«Move agent while it's working?» (13.10.2026). RC — конвертация: футер
-«This Computer» (y>1040) → «Continue on» → «This Computer (Self-Hosted
-Worker)» → если диалог uncommitted — **Exclude Changes** (не Include, не
-Enter). Окно Move agent — только **Cancel/Esc**, никогда «Stop and Move».
-Toast «Agent starting expensive processes» — закрывать **крестиком** до
-поиска якорей (не Manage / Don't show again). sqlite: `bc-<uuid>`, ждать
-до 90 с `convert-ok`. Слэш `/remote-control` сам стартует Environment.
-Чип «Run on» → Self-Hosted Worker — ловушка нового чата, не RC.
+**How local-rc is produced on 3.23.** Return in a new chat yields a local
+uuid with no `bc-`. **The task is the second message** (`--then` /
+`--then-file`): a short first message (default READY), wait until the turn
+ends, convert, then the task. A long prompt as the first message starts
+the agent before convert, and Cursor shows "Move agent while it's
+working?" (2026-10-13). RC is the conversion: footer "This Computer"
+(y>1040) → "Continue on" → "This Computer (Self-Hosted Worker)" → if the
+uncommitted dialog appears, **Exclude Changes** (not Include, not Enter).
+The Move agent window is **Cancel/Esc only**, never "Stop and Move".
+The toast "Agent starting expensive processes" is closed with the **X**
+before searching for anchors (not Manage, not Don't show again). sqlite:
+`bc-<uuid>`, wait up to 90 s for `convert-ok`. The slash `/remote-control`
+starts an Environment by itself. The "Run on" chip → Self-Hosted Worker is
+a trap in a new chat, not RC.
 
-Сессию класса environment (`/workspace`) в запрошенное имя не переименовывать.
+Do not rename a session of class environment (`/workspace`) to the
+requested name.
 
-Разбор sqlite: `scripts/glass.sh show bc-…`, `created-since`, `handoff-ok`,
+sqlite: `scripts/glass.sh show bc-…`, `created-since`, `handoff-ok`,
 `convert-ok`.
 
-## Когда что делать
+## When to do what
 
-1. Пользователь просит новую десктопную сессию / RC / rename / MCP /
-   статус стенда → этот skill, не Cloud Agents MCP, не `agent` CLI.
-2. Незнакомый хост или странный status → `scripts/doctor.sh` и
+1. The user asks for a new desktop session / RC / rename / MCP / stand
+   status → this skill, not the Cloud Agents MCP, not the `agent` CLI.
+2. An unfamiliar host or a strange status → `scripts/doctor.sh` and
    `pick-display.sh`.
-3. `scripts/stand.sh status`: экран, логин glass, окно «Cursor Agents»,
-   мышь стола, VNC.
-4. Стенд не жив и пользователь **явно** просит поднять → `up` **без** пути
-   папки (иначе IDE, не glass). Не `up` при человеке у монитора этой GPU.
-   Это правило для ручного `up` агентом. Таймер `cursor-stand.timer` делает
-   `ensure` (и `up`) сам после загрузки и каждые 5 мин — так решил владелец
-   07.10.2026; обычно стенд уже поднят, сначала `status`.
-5. Glass не залогинен → handoff не делать; логин владельца, не копия
-   `state.vscdb`.
-6. Последняя строка `doctor` содержит **ЗАБЛОКИРОВАН** → `stand.sh handoff`
-   **не** вызывать, якоря не подбирать с голоса; нужен новый замер UI.
-7. Новая сессия и doctor без блокировки →
-   `handoff -w /абсолютный/путь [-n имя] --then 'задача'`. Длинный текст
-   без `--then` — отказ. Скрипт сам откажет, если якорь не найден или
-   convert не дал local-rc.
-8. Локальный чат уже есть (handoff упал на convert / `--no-convert`) →
-   дождись конца хода (`busy` / нет Stop), затем
-   `convert --id <uuid> -w /ABS [-n имя]`. Не Archive и не Discard
-   работающего локального uuid — `mine`/`busy` показывают `kind=local`.
-9. Если send: `Selected private worker is not available` →
-   `wait-worker.sh /тот/же/путь`, затем `stand.sh composer-send --id <bc-id>`
-   (не второй New Chat, не второй `handoff` параллельно). Вид экрана не узнан —
-   команда не кликает: `shot`, разбор, не координаты с голоса.
-10. Проверка успеха (ниже): `handoff-ok`, не скриншот. class=environment →
-    стоп, не rename, не повтор теми же кликами.
-11. Имя не встало у **local-rc** → `rename --id bc-… имя`. Environment
-    в запрошенное имя не переименовывать.
-12. Ответ: URL `https://cursor.com/agents/<bc-id>`, **class=local-rc**,
-    имя, папка (`workspaceRootPath`, не `/workspace`), footer
-    `/path @ <hostname> (Self-Hosted Worker)`, что другие вкладки не трогал,
-    мышь стола.
-13. «Сессия должна видеть MCP» → не останавливаться на `mcp find`
-    enabled: довести по разделу MCP (user json при необходимости) и
-    проверить `composer-send` / namespace `ready`.
+3. `scripts/stand.sh status`: screen, glass login, the "Cursor Agents"
+   window, the owner's mouse, VNC.
+4. The stand is down and the user **explicitly** asks to bring it up →
+   `up` **without** a folder path (a path opens the IDE, not glass). Do
+   not `up` while a person is at this GPU's monitor. That rule is for an
+   agent running `up` by hand. The timer `cursor-stand.timer` runs
+   `ensure` (and `up`) by itself after boot and every 5 minutes, because
+   the owner decided that on 2026-10-07. The stand is usually already up.
+   Run `status` first.
+5. Glass is not signed in → do not handoff. The owner signs in. Do not
+   copy `state.vscdb`.
+6. The last line of `doctor` contains **ЗАБЛОКИРОВАН** (the script's own word) → do **not** call
+   `stand.sh handoff`, and do not pick anchors from chat. The UI needs a
+   new measurement.
+7. A new session and doctor is not blocked →
+   `handoff -w /absolute/path [-n name] --then 'task'`. A long text
+   without `--then` is a refusal. The script itself refuses when an
+   anchor is missing or convert did not produce local-rc.
+8. A local chat already exists (handoff failed at convert, or
+   `--no-convert`) → wait until the turn ends (`busy` / no Stop), then
+   `convert --id <uuid> -w /ABS [-n name]`. Do not Archive or Discard a
+   running local uuid. `mine` / `busy` show `kind=local`.
+9. If send says `Selected private worker is not available` →
+   `wait-worker.sh /the/same/path`, then `stand.sh composer-send --id <bc-id>`.
+   Not a second New Chat, not a second `handoff` in parallel. If the
+   screen is not recognized, the command does not click: `shot`, then
+   read it. Do not type coordinates.
+10. Check success (below): `handoff-ok`, not a screenshot.
+    class=environment → stop. Do not rename. Do not repeat the same clicks.
+11. The name did not stick on a **local-rc** → `rename --id bc-… name`.
+    Do not rename an Environment session to the requested name.
+12. The reply: URL `https://cursor.com/agents/<bc-id>`, **class=local-rc**,
+    the name, the folder (`workspaceRootPath`, not `/workspace`), footer
+    `/path @ <hostname> (Self-Hosted Worker)`, that other tabs were not
+    touched, and the owner's mouse.
+13. "The session must see MCP" → do not stop at `mcp find` enabled.
+    Finish the MCP section (user json if needed) and check
+    `composer-send` / namespace `ready`.
 
-## Handoff и convert
+## Handoff and convert
 
-Папка обязательна, **абсолютная**, существующий каталог проекта (не Home,
-не No Repo, не Recents-имя, не GitHub-репо вместо пути, не
-`~/.config/Cursor`, не профиль стенда). Скрипт вставляет путь в пикер
-кликом по строке (не Return в поиске — иначе Recents/GitHub → Environment).
-`/remote-control` **не** вызывать: на 3.23 слэш сам стартует Environment.
+The folder is required, **absolute**, an existing project directory (not
+Home, not No Repo, not a Recents name, not a GitHub repo in place of a
+path, not `~/.config/Cursor`, not the stand profile). The script inserts
+the path in the picker by clicking the row (not Return in the search —
+that picks Recents/GitHub and becomes an Environment). Do **not** call
+`/remote-control`: on 3.23 the slash starts an Environment by itself.
 
-**Порядок (13.10.2026).** (1) Короткое первое сообщение (дефолт READY;
-позиционный текст >120 символов — отказ). (2) Ждать конец хода (футер +
-follow-up, нет Stop). (3) Конвертация футера → Self-Hosted Worker
-(`glass_convert_to_rc`, общий с `convert`). (4) `--then` / `--then-file` —
-второе сообщение через `composer-send`. `-n` — Rename только у local-rc.
-`--no-convert` — оставить локальный чат (проба / recover). `--dry-run` не
-жмёт Return и не конвертирует.
+**Order (2026-10-13).** (1) A short first message (default READY; a
+positional text longer than 120 characters is a refusal). (2) Wait until
+the turn ends (footer plus follow-up, no Stop). (3) Convert the footer to
+Self-Hosted Worker (`glass_convert_to_rc`, shared with `convert`).
+(4) `--then` / `--then-file` is the second message via `composer-send`.
+`-n` renames only a local-rc. `--no-convert` leaves a local chat (a probe
+or a recovery). `--dry-run` does not press Return and does not convert.
 
 ```bash
 scripts/stand.sh handoff -w /path/to/project -n name --then-file /tmp/task.txt
@@ -237,79 +260,84 @@ scripts/stand.sh convert --id <uuid> -w /path/to/project -n name
 scripts/stand.sh convert --id bc-… --dry-run
 ```
 
-`convert`: открыть чат, убедиться что не работает (нет Stop; Move agent →
-Cancel и отказ), футер → Worker, Exclude при uncommitted, `convert-ok`,
-опционально `-n`. Чужие вкладки не трогать.
+`convert`: open the chat, make sure it is not running (no Stop; Move
+agent → Cancel and refuse), footer → Worker, Exclude on uncommitted,
+`convert-ok`, optionally `-n`. Do not touch other tabs.
 
-Перед якорями скрипт закрывает toast expensive-processes крестиком; при
-диалоге Move agent жмёт Cancel и выходит. Не «Stop and Move», не
-«Don't show again».
+Before anchors, the script closes the expensive-processes toast with the
+X. On a Move agent dialog it presses Cancel and exits. Not "Stop and
+Move", not "Don't show again".
 
-Имя: Cursor сам называет чат по первому сообщению. `-n` — после local-rc.
-Старую сессию той же папки не переименовывать. Локальный uuid без записи
-в `cloudAgentRepository` — не мусор: смотри `mine`/`busy` (`kind=local`).
+The name: Cursor names the chat from the first message. `-n` runs after
+local-rc. Do not rename an older session of the same folder. A local uuid
+with no row in `cloudAgentRepository` is not trash: look at `mine` /
+`busy` (`kind=local`).
 
-Первый send в **новую** папку часто падает, пока нет daemon
-`--worker-dir <папка>` из **профиля стенда**. Ключ из cmdline **не**
-печатать. Один стенд на машину; новые агенты — **вкладки** glass.
+The first send into a **new** folder often fails until a daemon
+`--worker-dir <folder>` exists from the **stand profile**. Do not print
+the key from the command line. One stand per machine. New agents are
+glass **tabs**.
 
 ## Rename
 
-Ровно один селектор: `--id` (предпочтительно полный `bc-…`), `--from
-'старое имя'`, `--current`, либо два аргумента `старое новое`. Сначала
-Search Agents (Ctrl+Alt+P) по **bc-id**; sqlite `selectedAgent` должен
-совпасть — иначе имя не менять. OCR коротких имён и
-кириллицы врёт; `palette-ok` подтверждает uuid. Палитра не та — Escape,
-не Return (иначе New agent). `/rename` CLI — другая сессия.
+Exactly one selector: `--id` (preferably the full `bc-…`), `--from
+'old name'`, `--current`, or two arguments `old new`. First Search Agents
+(Ctrl+Alt+P) by **bc-id**. sqlite `selectedAgent` must match — otherwise
+do not change the name. OCR lies about short names and Cyrillic.
+`palette-ok` confirms the uuid. The wrong palette means Escape, not
+Return (Return would be New agent). The `/rename` CLI is a different
+session.
 
-## MCP (Customize → MCPs → сессия RC)
+## MCP (Customize → MCPs → the RC session)
 
-Два разных критерия. Не путать.
+Two different tests. Do not mix them.
 
-| этап | что значит «ок» | чего недостаточно |
+| stage | what "ok" means | what is not enough |
 |---|---|---|
-| UI | `mcp find NAME` → не `Disabled` (часто «N tools enabled») | файл `.cursor/mcp.json` без тоггла |
-| сессия RC | агент этой папки видит namespace `NAME` (`ready`) в dynamic tools | только UI enable / только файл |
+| UI | `mcp find NAME` is not `Disabled` (often "N tools enabled") | a `.cursor/mcp.json` file with no toggle |
+| RC session | the agent of this folder sees namespace `NAME` (`ready`) in dynamic tools | UI enable alone, or the file alone |
 
-Проектный `.cursor/mcp.json` и пользовательский `~/.cursor/mcp.json`:
-тоггл в Customize давали «87 tools enabled» в UI, но RC-агент namespace не
-видел, пока сервер не появился ещё и в **user** `~/.cursor/mcp.json`, UI
-перечитал источники, воркер папки пересобрал кэш
+A project `.cursor/mcp.json` and the user `~/.cursor/mcp.json`: the
+Customize toggle showed "87 tools enabled" in the UI, but the RC agent
+did not see the namespace until the server also existed in the **user**
+`~/.cursor/mcp.json`, the UI re-read the sources, and the folder's worker
+rebuilt the cache
 `$PROFILE/User/globalStorage/anysphere.cursor-agent-worker/worker-data/*/projects/<slug>/mcps/NAME/`
-(есть `SERVER_METADATA.json` + `tools/`). Ручное копирование tool-JSON в
-кэш даёт stale (`project-0-…` / `user-…` рядом с каноном) — не делать.
+(`SERVER_METADATA.json` plus `tools/`). Copying tool JSON into the cache
+by hand goes stale (`project-0-…` / `user-…` next to the canon). Do not
+do that.
 
-### Порядок доведения сервера до RC
+### Bringing a server to RC
 
-1. Запись json (без секретов в argv): проект и/или user.
+1. Write the json (no secrets on argv): project and/or user.
    ```bash
    scripts/stand.sh mcp add -w /ABS -n NAME --command /path [--arg …]
-   # если RC после enable так и не видит namespace — тот же сервер в user:
+   # if RC still does not see the namespace after enable, the same server as user:
    scripts/stand.sh mcp add --user -n NAME --command /path
    ```
-2. Тоггл источника ON в Customize → MCPs (скрипт сам после `add`):
+2. Toggle the source ON in Customize → MCPs (the script does this after `add`):
    ```bash
    scripts/stand.sh mcp find NAME    # UI
-   scripts/stand.sh mcp enable NAME  # идемпотентно, если уже on
+   scripts/stand.sh mcp enable NAME  # idempotent if already on
    ```
-   Поиск Customize search **не** использовать (ломает вкладки). Форму
-   «New MCP Server» скрипт не заполняет.
-3. Вкладка сессии папки открыта → воркер жив (`wait-worker` / `workers`).
-   При необходимости Reload в панели MCP / Done после тоггла; не `park`
-   «на всякий случай» (убьёт чужие ходы).
-4. Проверка **сессии**, не только UI:
+   Do not use Customize search (it breaks the panel tabs). The script does
+   not fill the "New MCP Server" form.
+3. The folder's session tab is open and the worker is alive (`wait-worker`
+   / `workers`). Reload in the MCP panel, or Done after the toggle, if
+   needed. Do not `park` "just in case" (that kills other turns).
+4. Check the **session**, not only the UI:
    ```bash
    scripts/stand.sh focus --id bc-…
    scripts/stand.sh composer-send --id bc-… \
      'Reply one line: is namespace NAME in your dynamic tools? ready/missing.'
    ```
-   Успех: ответ агента `ready` **или** в кэше воркера канон
-   `…/mcps/NAME/` с tools и без необходимости дублей. OCR `mcp list` может
-   показать две строки одного имени (project + user) — норма, пока сессия
-   видит один namespace `ready`.
-5. После синхронизации устаревшие каталоги `project-0-NAME` / `user-NAME` в
-   кэше воркера можно удалить; канон `NAME` оставить. Не чистить кэш, пока
-   сессия ещё `missing`.
+   Success: the agent's reply is `ready`, **or** the worker cache has the
+   canon `…/mcps/NAME/` with tools and the duplicates are unnecessary.
+   OCR `mcp list` may show two rows of one name (project + user). That is
+   normal while the session sees one namespace `ready`.
+5. After sync, stale `project-0-NAME` / `user-NAME` directories in the
+   worker cache can be removed. Leave the canon `NAME`. Do not clean the
+   cache while the session is still `missing`.
 
 ```bash
 scripts/stand.sh mcp list
@@ -320,76 +348,83 @@ scripts/stand.sh mcp add -w /path/to/project -n name --command /path/to/server.p
 scripts/stand.sh mcp add --user -n name --command /path/to/server.py
 ```
 
-Секреты прокси сервер читает сам (`~/.config/…`), в чат и git не класть.
-После смены UI якоря `customize` / `customize-mcps` / тоггл — отказ, не
-координаты с голоса. Детали OCR/кэша — [reference.md](reference.md).
+The server reads proxy secrets itself (`~/.config/…`). Do not put them in
+chat or git. After a UI change, the anchors `customize` /
+`customize-mcps` / the toggle are a refusal, not coordinates from chat.
+OCR and cache details: [reference.md](reference.md).
 
-`mcp list` печатает статус `enabled`, `disabled` или `error` и строку под
-именем («109 tools enabled», «7 tools, 5 resources enabled», «Error Show
-Output»). Короткое имя вроде `n8n` OCR часто читает как `gn` или `nan`:
-скрипт сверяет вырезку с именами из mcp.json. Одиночный дефис и одна буква
-именем сервера не считаются.
+`mcp list` prints status `enabled`, `disabled`, or `error`, and the line
+under the name ("109 tools enabled", "7 tools, 5 resources enabled",
+"Error Show Output"). OCR often reads a short name such as `n8n` as `gn`
+or `nan`. The script compares the crop with names from mcp.json. A single
+hyphen and a single letter are not a server name.
 
-## Settings → Agents (только чтение)
+## Settings → Agents (read only)
 
 ```bash
 scripts/stand.sh settings agents
 ```
 
-Открывает File → Settings → Agents, пролистывает страницу и печатает
-тумблеры и выпадающие списки. Ничего не переключает. Тумблер читается по
-цвету дорожки (зелёная = on, серая = off), значение списка — вырезкой
-справа от подписи.
+Opens File → Settings → Agents, scrolls the page, and prints toggles and
+dropdowns. It switches nothing. A toggle is read from the track color
+(green = on, grey = off). A dropdown value is the crop to the right of
+the label.
 
-Строки, без которых команда отказывается: Remote Control (и подпись
-Connected), self-hosted workers, очередь новых сообщений, Run Mode, Read
-Access, защита удаления, защита файлов вне папки, Web Search, ожидание
-MCP. Ниже по странице ещё Computer Use (список всегда разрешённых
-приложений) и Legacy Terminal.
+Rows without which the command refuses: Remote Control (and the Connected
+label), self-hosted workers, the queue of new messages, Run Mode, Read
+Access, delete protection, protection of files outside the folder, Web
+Search, waiting on MCP. Further down the page: Computer Use (the list of
+always-allowed applications) and Legacy Terminal.
 
-Куда скрипт не кликает, даже если надпись видна: Cloud Agents и Docs
-(открывают браузер), Unregister All, Log Out, Manage Environment, карточка
-Build on App, поиск настроек и поиск Customize. Строка проекта в сайдбаре
-тоже не цель: у неё меню с Log Out. Если безопасной точки нет — отказ и
-снимок, не соседняя координата.
+Where the script does not click, even if the label is visible: Cloud
+Agents and Docs (they open a browser), Unregister All, Log Out, Manage
+Environment, the Build on App card, settings search, and Customize
+search. A project row in the sidebar is not a target either: its menu has
+Log Out. If there is no safe point, refuse and take a shot. Do not click
+a neighbor.
 
-## Рестарт стенда
+## Restarting the stand
 
-| команда | что гасит | что оставляет |
+| command | what it stops | what it leaves |
 |---|---|---|
-| `park` | Cursor стенда + его worker’ы | `:105`, VNC, inbox в вебе |
-| `down` | park + x11vnc | экран |
-| `down-display` | экран `:105` по PID | ничего; **запрещено** при живом glass |
+| `park` | the stand's Cursor and its workers | `:105`, VNC, the web inbox |
+| `down` | park plus x11vnc | the screen |
+| `down-display` | the `:105` screen, by PID | nothing; **forbidden** while glass is alive |
 
-`park`/`down` ставят `$PROFILE/var/hold` — таймер `ensure` не поднимает.
-Снимает `up`. Живой lock `~/.config/Cursor` не убивать.
+`park` / `down` set `$PROFILE/var/hold`. The `ensure` timer does not bring
+the stand up. `up` clears the hold. Do not kill a live lock of
+`~/.config/Cursor`.
 
-Inbox облачный: список сессий переживает park. RC follow-up — после `up`
-и открытой вкладки этой папки (`workers` / `ensure` на свежем скрипте).
-`ensure` не вызывать «на всякий случай» из соседнего чата; таймер
-`cursor-stand.timer` не enable/disable без просьбы.
+The inbox is in the cloud: the session list survives park. An RC
+follow-up waits for `up` and an open tab of that folder (`workers` /
+`ensure` on a current script). Do not call `ensure` "just in case" from a
+neighboring chat. Do not enable or disable `cursor-stand.timer` unless
+asked.
 
-История CLI (`~/.cursor/chats/.../store.db`) в glass **не** resume. Можно
-дать путь к `store.db` в промпте новой desktop-сессии как бриф.
+CLI history (`~/.cursor/chats/.../store.db`) does **not** resume in glass.
+You may give the path to `store.db` in the prompt of a new desktop session
+as a brief.
 
-## Успех handoff
+## Handoff success
 
-Все пункты. Скриншот «This Computer» / «Set up Environment» — **не** успех.
+Every item. A screenshot of "This Computer" or "Set up Environment" is
+**not** success.
 
-- `scripts/glass.sh handoff-ok /ABS/PROJECT [since_ms [uuid]]` код 0;
-- `class=local-rc` (не `environment`, не `private-incomplete`);
-- `workspaceRootPath` = запрошенный путь (**не** `/workspace`);
-- `privateWorkerDisplayName` содержит этот путь и `@ <hostname>`;
-- `cloudTargetKey` не решает сам: смотри `class` и `workspaceRootPath`;
-- новая `bc-id`; имя, если просили `-n` (только у local-rc);
+- `scripts/glass.sh handoff-ok /ABS/PROJECT [since_ms [uuid]]` exits 0;
+- `class=local-rc` (not `environment`, not `private-incomplete`);
+- `workspaceRootPath` is the requested path (**not** `/workspace`);
+- `privateWorkerDisplayName` contains that path and `@ <hostname>`;
+- `cloudTargetKey` does not decide by itself: look at `class` and
+  `workspaceRootPath`;
+- a new `bc-id`; the name, if `-n` was asked (local-rc only);
 - footer `/path @ <hostname> (Self-Hosted Worker)` / Remote Control;
-  кнопка Set up Environment на этой вкладке **не** отменяет успех;
-- мышь стола не сдвинулась **или** была `unavailable`;
-- другие bc-id не переименованы.
+  a Set up Environment button on this tab does **not** cancel success;
+- the owner's mouse did not move, **or** it was `unavailable`;
+- other bc-ids were not renamed.
 
-Если `class=environment`: стоп. Не rename, не второй `handoff` теми же
-кликами, в ответ пользователю — bc-id, class, `workspaceRootPath`,
-`cloudTargetKey`.
+If `class=environment`: stop. Do not rename. Do not run a second `handoff`
+with the same clicks. Tell the user the bc-id, the class,
+`workspaceRootPath`, and `cloudTargetKey`.
 
 ```bash
 scripts/glass.sh created-since <epoch_ms>
@@ -399,69 +434,76 @@ scripts/glass.sh selected
 scripts/stand.sh shot
 ```
 
-## Запреты (пока пользователь не сказал иначе)
+## Do not (unless the user said otherwise)
 
-- `xdotool` / `wmctrl` / `scrot` без `DISPLAY=` стенда (дефолт агента часто `:1`).
-- `cursor` / `cursor-proxy` без `--user-data-dir` профиля стенда.
-- `pkill Xorg`, `pkill cursor`. Стоп экрана — только `down-display` своего DISPLAY.
-- Копия живого `~/.config/Cursor` / `state.vscdb` / worker keys / OTP / пароли в git, скилл, argv, чат.
-- `park`, `down`, `down-display` — только по явной просьбе.
-- Второй Xorg / второй профиль «на сессию».
-- Cloud Agents / `agent create-chat` вместо glass RC.
-- `up /path` (путь в argv).
-- Тихий Xvfb, когда просили GPU (`CURSOR_STAND_X=xorg` тогда обязан упасть).
-- Считать успехом скриншот без bc-id и мыши стола.
-- Считать успехом «This Computer», «Set up Environment»,
-  `workspaceRootPath=/workspace` или GitHub-репо вместо пути на диске.
-- Переименовывать Environment-сессию в запрошенное имя.
-- Повторный `handoff` теми же кликами после отказа `handoff-ok`.
-- Слэш `/remote-control` или клик Self-Hosted Worker в чипе «Run on»
-  нового чата (это Environment, не RC).
-- Include Changes / Enter в диалоге uncommitted (Enter = Include).
-- «Stop and Move» в диалоге Move agent while working (только Cancel/Esc).
-- «Manage Processes» / «Don't show again» на toast expensive-processes
-  (только крестик).
-- Archive / Discard работающего локального чата без bc- (`mine`/`busy`
-  показывают `local`) — сначала дождаться хода и `convert`.
-- Длинный промпт первым сообщением handoff без `--then`.
-- Archive All Below в сайдбаре (сейф для локального черновика — Discard).
-- Выдумывать координаты / крутить xdotool с голоса.
-- Писать в ответ API keys из `/proc/*/cmdline`.
-- В настройках стенда кликать Cloud Agents, Docs, Unregister All, Log Out,
-  Manage Environment, Build on App. Это делает браузер, снимает регистрацию
-  или выходит из аккаунта. Чтение страницы — `settings agents`.
-- Печатать в поле поиска Customize или Settings.
+- `xdotool` / `wmctrl` / `scrot` without the stand's `DISPLAY=` (an agent's
+  default is often `:1`).
+- `cursor` / `cursor-proxy` without the stand profile's `--user-data-dir`.
+- `pkill Xorg`, `pkill cursor`. Stop a screen only with `down-display` of
+  its own DISPLAY.
+- A copy of the live `~/.config/Cursor` / `state.vscdb` / worker keys /
+  OTP / passwords in git, the skill, argv, or chat.
+- `park`, `down`, `down-display` except on an explicit request.
+- A second Xorg or a second profile "per session".
+- Cloud Agents or `agent create-chat` instead of glass RC.
+- `up /path` (a path in argv).
+- A quiet Xvfb when the GPU was requested (`CURSOR_STAND_X=xorg` must fail).
+- Treating a screenshot as success when there is no bc-id and no check of
+  the owner's mouse.
+- Treating "This Computer", "Set up Environment",
+  `workspaceRootPath=/workspace`, or a GitHub repo instead of a path on
+  disk as success.
+- Renaming an Environment session to the requested name.
+- A second `handoff` with the same clicks after `handoff-ok` refused.
+- The slash `/remote-control`, or a click on Self-Hosted Worker in the
+  "Run on" chip of a new chat (that is an Environment, not RC).
+- Include Changes or Enter in the uncommitted dialog (Enter means Include).
+- "Stop and Move" in the Move agent while working dialog (Cancel/Esc only).
+- "Manage Processes" or "Don't show again" on the expensive-processes toast
+  (the X only).
+- Archive or Discard of a running local chat that has no bc- (`mine` /
+  `busy` show `local`). Wait for the turn, then `convert`.
+- A long prompt as the first handoff message, without `--then`.
+- Archive All Below in the sidebar (the safe action for a local draft is
+  Discard).
+- Inventing coordinates or driving xdotool from chat.
+- Writing API keys from `/proc/*/cmdline` into a reply.
+- In the stand's settings, clicking Cloud Agents, Docs, Unregister All,
+  Log Out, Manage Environment, or Build on App. Those open a browser,
+  drop the registration, or sign out. Reading the page is
+  `settings agents`.
+- Typing into the Customize or Settings search box.
 
-## Хосты (кратко)
+## Hosts (short)
 
-Один стенд на машину. Сессия, заведённая на A, получает worker `@ A`.
-Та же строка в сайдбаре B (общий аккаунт) тулы на B **не** исполняет.
+One stand per machine. A session started on A gets a worker `@ A`.
+The same sidebar row on B (a shared account) does **not** run tools on B.
 
-Профиль машины — `config/hosts/$(hostname).env`. Имена хостов, порты и
-GPU туда, не в этот скилл. См. [hosts.md](hosts.md).
+The machine profile is `config/hosts/$(hostname).env`. Host names, ports,
+and the GPU go there, not into this skill. See [hosts.md](hosts.md).
 
 ## Env
 
-| переменная | смысл | дефолт |
+| variable | meaning | default |
 |---|---|---|
-| `CURSOR_STAND_SH` | путь к `cursor-stand.sh` | резолв `scripts/stand.sh` |
-| `CURSOR_STAND_PROFILE` | `--user-data-dir` | `$XDG_DATA_HOME/cursor-stand` или `~/.local/share/cursor-stand` |
+| `CURSOR_STAND_SH` | path to `cursor-stand.sh` | resolved by `scripts/stand.sh` |
+| `CURSOR_STAND_PROFILE` | `--user-data-dir` | `$XDG_DATA_HOME/cursor-stand` or `~/.local/share/cursor-stand` |
 | `CURSOR_STAND_DISPLAY` | glass | `:105` |
 | `CURSOR_STAND_VNC` | x11vnc | `5916` |
-| `CURSOR_STAND_ORIG_DISPLAY` | стол, замер мыши | `:1` |
-| `CURSOR_STAND_DISPLAY_SH` | экран | `automation/display/stand-display.sh` |
-| `CURSOR_STAND_BIN` | бинарь | `/usr/local/bin/cursor-proxy` |
-| `CURSOR_STAND_PROXY` | HTTP proxy Cursor | пусто (без прокси); URL только из ответа человека в `config/hosts/<host>.env` |
-| `CURSKILL_SETUP_DONE` | doctor может кликать dry-run | пусто, пока человек не ответил. `1` закрывает настройку |
-| `CURSOR_STAND_CONFIG` | файл профиля машины | `config/hosts/$(hostname).env`, если есть |
+| `CURSOR_STAND_ORIG_DISPLAY` | owner's desktop, mouse check | `:1` |
+| `CURSOR_STAND_DISPLAY_SH` | screen | `automation/display/stand-display.sh` |
+| `CURSOR_STAND_BIN` | binary | `/usr/local/bin/cursor-proxy` |
+| `CURSOR_STAND_PROXY` | Cursor HTTP proxy | empty (no proxy); a URL only from the person's answer in `config/hosts/<host>.env` |
+| `CURSKILL_SETUP_DONE` | doctor may click dry-run | empty until the person has answered. `1` closes setup |
+| `CURSOR_STAND_CONFIG` | machine profile file | `config/hosts/$(hostname).env`, if it exists |
 | `CURSOR_STAND_X` | `auto` \| `xorg` \| `xvfb` | `auto` |
-| `CURSOR_STAND_WAIT_WORKER_SEC` | таймаут wait-worker | `120` |
-| `CURSOR_STAND_UI_CALIBRATED` | мажор.минор якорей (справка) | `3.23` |
+| `CURSOR_STAND_WAIT_WORKER_SEC` | wait-worker timeout | `120` |
+| `CURSOR_STAND_UI_CALIBRATED` | major.minor of the anchors (a note) | `3.23` |
 
-Runtime, снимки, `state.env`, `hold` — `$PROFILE/var`, вне git.
+Runtime, shots, `state.env`, and `hold` live in `$PROFILE/var`, outside git.
 
-## Лабораторные доки (не копипастить в ответ пользователю)
+## Lab notes (do not paste into the user's reply)
 
-- экран — [display.md](display.md)
-- хосты — [hosts.md](hosts.md)
-- отказы, координаты, sqlite — [reference.md](reference.md)
+- screen — [display.md](display.md)
+- hosts — [hosts.md](hosts.md)
+- failures, coordinates, sqlite — [reference.md](reference.md)

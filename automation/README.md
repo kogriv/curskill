@@ -1,10 +1,13 @@
-# Команды стенда
+# Stand commands
 
-Канон — [`cursor-stand.sh`](./cursor-stand.sh).
-Экран по умолчанию — [`display/stand-display.sh`](./display/stand-display.sh).
-Образец прокси — [`settings.proxy.json`](./settings.proxy.json): порт `0`,
-в профиль его не класть. Живой прокси задаёт `CURSOR_STAND_PROXY`
-в `config/hosts/<hostname>.env`.
+Russian: [README.ru.md](README.ru.md). English is the copy to follow.
 
-Обёртка Xorg — [`curskill-xorg`](./curskill-xorg). Разрешённый дисплей
-читает из `/etc/cursor-stand/display`, иначе пускает только `:105`.
+The canon is [`cursor-stand.sh`](./cursor-stand.sh).
+The default screen is [`display/stand-display.sh`](./display/stand-display.sh).
+The proxy sample is [`settings.proxy.json`](./settings.proxy.json): port `0`.
+Do not copy it into a profile. The live proxy is `CURSOR_STAND_PROXY`
+in `config/hosts/<hostname>.env`.
+
+The Xorg wrapper is [`curskill-xorg`](./curskill-xorg). The display it
+allows is read from `/etc/cursor-stand/display`. Otherwise it allows only
+`:105`.

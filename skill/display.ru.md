@@ -1,0 +1,110 @@
+# Экран стенда Cursor
+
+Английский — источник правды: [display.md](display.md).
+
+Источник правды по запуску X: `automation/display/stand-display.sh`.
+Этот текст — для агента, чтобы не путать стол, GPU и VNC.
+
+## Зачем отдельный X-сервер
+
+Computer-use по `:1` крадёт фокус и ввод владельца. Стенд — второй X11
+с одним окном «Cursor Agents». Человек смотрит стол или телефон; агент
+кликает только `$CURSOR_STAND_DISPLAY` (дефолт `:105`).
+
+Это **не**:
+
+- окно Cursor на рабочем столе, сдвинутое в угол;
+- Xvfb «по умолчанию, чтобы не трогать GPU»;
+- Wayland / weston / cage;
+- второй GPU-сервер «на каждую сессию».
+
+Новые агенты — вкладки **того же** glass на **том же** `:105`.
+
+## Размещение окна
+
+После `up` / перед handoff скрипт:
+
+1. ищет окно с именем `Cursor Agents` на `$DISP`;
+2. `windowactivate`, `windowmove 0 0`, `windowsize 1920 1080`.
+
+Калибровка `handoff` / `composer-send` / клик слэша **прибита** к этому
+гео **и к Cursor 3.21**. Если glass 1280×800 не в нуле (бывало после
+park→up без нормализации) — клики уезжают. Скрипт нормализует сам; руками
+размер не подбирать. Смена мажора Cursor (замер 3.23.23: пикер Environment)
+— не крутить координаты, см. [reference.ru.md](reference.ru.md).
+
+Просмотр: `x11vnc -display :105 -rfbport 5916 -localhost -forever -shared
+-nopw`. Снаружи машины порт не слушает. Пароль VNC в git не класть.
+
+Стол владельца скрипт не перемещает. Мышь `:1` до и после операции должна
+совпасть, либо статус `unavailable` (на машине нет мыши `:1`). Сдвиг при `unavailable` не
+проверяется; сдвиг при живой мыши — «изоляция сломана», если это не сам
+владелец за столом.
+
+## Чем рисовать: GPU Xorg vs Xvfb
+
+Переменная `CURSOR_STAND_X` (`auto` \| `xorg` \| `xvfb`), дефолт `auto`.
+Это **текущая схема**. Скилл отдельного меню не рисует: либо оставь
+`auto`, либо пользователь явно просит `xorg`/`xvfb`. Перед `up`:
+
+```bash
+scripts/pick-display.sh
+```
+
+### `auto` (дефолт)
+
+`stand_pick_xserver` берёт **xorg-nvidia**, если все истинны:
+
+- файл `$CURSOR_STAND_NVIDIA_DRV` (дефолт
+  `/usr/lib/x86_64-linux-gnu/nvidia/xorg/nvidia_drv.so`);
+- xorg-conf рядом со скриптом экрана (`xorg-nvidia-headless.conf`);
+- бинарь `Xorg`;
+- passwordless: `sudo -n true` либо NOPASSWD на
+  `/usr/local/sbin/curskill-xorg` (обёртка сама ставит BusID из `lspci`).
+
+Иначе печатает `ВНИМАНИЕ: … — поднимаю Xvfb` и возвращает `xvfb`.
+Тихого отката нет — это специально (SwiftShader съедает ядро без слова).
+
+### `xorg`
+
+Та же проверка; при любой дыре — **exit**, не Xvfb. Ставь, когда GPU
+обязателен (замер, человек сказал «только карта»).
+
+### `xvfb`
+
+Сразу `Xvfb :105 -screen 0 1920x1080x24`. Root не нужен. Electron на
+программном рендере. Для разовой сессии на машине без NVIDIA — ок; для
+постоянной работы на NVIDIA — нет, пока карта жива.
+
+Нет ветки «AMD», «Intel», «CUDA», «второй монитор». Нет выбора
+«окно на :1, если GPU занят».
+
+## Конфиг GPU Xorg
+
+`AutoAddGPU off`, `AutoAddDevices off`, `DontVTSwitch`, виртуальный
+1920×1080, `UseDisplayDevice None`, `AllowEmptyInitialConfiguration`.
+Без этого второй Xorg через udev заберёт клавиатуру в окно стенда.
+
+BusID в репозитории — заглушка `PCI:0:0:0`. Обёртка `curskill-xorg`
+переписывает его из `lspci` перед стартом. Чужой слот в конфиг не
+писать. Уже живой `:105` команда `up` не пересоздаёт.
+
+Остановка: PID из `/tmp/.X<N>-lock` / state, только этот `$disp`.
+Никогда `pkill Xorg` — на той же карте может жить стол `:1`.
+
+`up` при уже живом `:105` не стартует второй сервер, только
+`adopt_if_live`.
+
+## Номер дисплея
+
+Калибровка прибита к `:105` и VNC `5916`. Другой номер — только если
+этот занят, и тогда якоря надо снимать заново.
+
+## Env, которые трогают экран
+
+`CURSOR_STAND_DISPLAY`, `CURSOR_STAND_VNC`, `CURSOR_STAND_ORIG_DISPLAY`,
+`CURSOR_STAND_DISPLAY_SH`, `CURSOR_STAND_X`, `CURSOR_STAND_NVIDIA_DRV`,
+`CURSKILL_XORG`.
+
+`unset WAYLAND_DISPLAY`; `GDK_BACKEND=x11`, `QT_QPA_PLATFORM=xcb`,
+IME `xim` (иначе IBus глотает `xdotool type` — поэтому type запрещён).

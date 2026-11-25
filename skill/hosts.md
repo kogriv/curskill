@@ -1,18 +1,21 @@
-# Хосты
+# Hosts
 
-Первая машина: [SETUP.md](../SETUP.md) и `scripts/setup.sh`.
-Пока `CURSKILL_SETUP_DONE` не равен `1`, `doctor` по glass не кликает.
+Russian: [hosts.ru.md](hosts.ru.md). English is the copy to follow.
 
-Один стенд на машину. Порты, профиль, экран и список сессий, которые
-`archive` не трогает, живут в `config/hosts/$(hostname).env`.
-Пустой образец — `config/hosts/example.env.example`. Сам `.env` в gitignore.
-В скрипт эти значения не зашиты.
+A first machine: [SETUP.md](../SETUP.md) and `scripts/setup.sh`.
+Until `CURSKILL_SETUP_DONE` is `1`, `doctor` does not click the glass UI.
 
-`install/install.sh` вешает симлинки скилла `curskill` и не подменяет
-таймер. `doctor.sh` на незнакомом хосте обязателен. На свободном стенде
-он кликает `handoff --dry-run` без текста и без Return. Занятый стенд
-он не кликает. Логин Cursor в репозиторий не писать.
+One stand per machine. Ports, the profile, the screen, and the sessions
+`archive` must not touch live in `config/hosts/$(hostname).env`.
+The empty sample is `config/hosts/example.env.example`. The `.env` itself
+is gitignored. Those values are not hardcoded in the script.
 
-Экран по умолчанию — `automation/display/stand-display.sh`.
-Дисплей не `:105` для `curskill-xorg` задаётся одной строкой `:N` в
-`/etc/cursor-stand/display` (файл root). Без файла обёртка пускает только `:105`.
+`install/install.sh` symlinks the `curskill` skill and does not replace
+the timer. `doctor.sh` is required on an unfamiliar host. On a free stand
+it clicks `handoff --dry-run` with no text and no Return. It does not
+click a busy stand. Do not write a Cursor login into the repository.
+
+The default screen is `automation/display/stand-display.sh`.
+A display other than `:105` for `curskill-xorg` is one line `:N` in
+`/etc/cursor-stand/display` (a root file). With no file, the wrapper
+allows only `:105`.

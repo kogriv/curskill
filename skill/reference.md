@@ -1,274 +1,304 @@
-# Отказы, sqlite, калибровка
+# Refusals, sqlite, calibration
 
-Читать при сбое. Координаты — снимок скрипта, не второй источник правды:
-менять в `cursor-stand.sh`, не «подкрутить xdotool в чате».
+Russian: [reference.ru.md](reference.ru.md). English is the copy to follow.
 
-## Три механизма
+Read this when something fails. Coordinates are a snapshot of the script,
+not a second source of truth. Change them in `cursor-stand.sh`, not by
+"nudging xdotool in chat".
 
-| | мозг | тулы | как плодить |
+## Three mechanisms
+
+| | brain | tools | how you spawn one |
 |---|---|---|---|
-| Cloud Agents | облако | чужая VM | API / MCP `cursor-cloud` |
-| CLI `agent` | терминал | этот хост | `agent`, `store.db` |
-| Agents Window + RC | облако | private worker этой машины | glass / этот стенд |
+| Cloud Agents | the cloud | someone else's VM | API / MCP `cursor-cloud` |
+| CLI `agent` | the terminal | this host | `agent`, `store.db` |
+| Agents Window + RC | the cloud | a private worker on this machine | glass / this stand |
 
-`/rename` CLI ≠ Rename сайдбара glass. CLI history ≠ resume в glass.
+CLI `/rename` is not the glass sidebar Rename. CLI history is not a glass resume.
 
 ## sqlite
 
-Профиль стенда: `$CURSOR_STAND_PROFILE/User/globalStorage/state.vscdb`
-(дефолт `$XDG_DATA_HOME/cursor-stand` или `~/.local/share/cursor-stand`).
-`glass_agents.py` читает `CURSOR_STAND_PROFILE`.
+The stand profile is `$CURSOR_STAND_PROFILE/User/globalStorage/state.vscdb`
+(default `$XDG_DATA_HOME/cursor-stand` or `~/.local/share/cursor-stand`).
+`glass_agents.py` reads `CURSOR_STAND_PROFILE`.
 
 ```bash
 scripts/glass.sh selected          # selectedAgent, lastRealAgent
 scripts/glass.sh resolve --id bc-…
-scripts/glass.sh show bc-…         # class + поля пикера
+scripts/glass.sh show bc-…         # class + picker fields
 scripts/glass.sh created-since <epoch_ms>
-scripts/glass.sh handoff-ok /ABS/WS [since_ms [uuid]]   # с uuid — эта сессия; без него новейшая с since
-scripts/glass.sh newest /ABS/WS [since_ms]      # только class=local-rc
+scripts/glass.sh handoff-ok /ABS/WS [since_ms [uuid]]   # with uuid, that session; without it, the newest since
+scripts/glass.sh newest /ABS/WS [since_ms]      # class=local-rc only
 scripts/glass.sh mine "$(hostname)"  # id name ws kind working; local-rc + local
-scripts/glass.sh busy "$(hostname)"  # работающие; + локальный selected без записи
-scripts/glass.sh convert-ok UUID /ABS/WS  # 0 local-rc папки; 2 ещё environment
-scripts/glass.sh overlay-scan SHOT   # expensive-dismiss / move-working (код 0/3/1)
+scripts/glass.sh busy "$(hostname)"  # running; plus a local selected with no row
+scripts/glass.sh convert-ok UUID /ABS/WS  # 0 local-rc of the folder; 2 still environment
+scripts/glass.sh overlay-scan SHOT   # expensive-dismiss / move-working (code 0/3/1)
 ```
 
-Ключи: `cloudAgentRepository.agents*`, `cursor/glass.selectedAgent`,
-`cursorAuth/cachedEmail`. Писать в vscdb руками нельзя.
+Keys: `cloudAgentRepository.agents*`, `cursor/glass.selectedAgent`,
+`cursorAuth/cachedEmail`. Do not write the vscdb by hand.
 
 `glass_agents.py classify`: `local-rc` | `environment` | `private-incomplete`
 | `other`.
 
-| class | как узнаём |
+| class | how it is recognized |
 |---|---|
-| `environment` | `cloudTargetKey` начинается с `logicalEnvironment:` **или** `workspaceRootPath=/workspace` |
-| `local-rc` | `usePrivateWorker` + непустые `privateWorkerDisplayName` и `workspaceRootPath`, и это не environment |
-| `private-incomplete` | `usePrivateWorker`, но нет имени воркера или пути |
-| `other` | остальное (Cloud без private worker) |
+| `environment` | `cloudTargetKey` starts with `logicalEnvironment:` **or** `workspaceRootPath=/workspace` |
+| `local-rc` | `usePrivateWorker` plus a non-empty `privateWorkerDisplayName` and `workspaceRootPath`, and it is not an environment |
+| `private-incomplete` | `usePrivateWorker`, but no worker name or no path |
+| `other` | the rest (Cloud without a private worker) |
 
-Поля для разбора (команда `show`): `bcId`, `name`, `class`,
-`workspaceRootPath`, `localFsPath` (из `privateWorkspaceIdentifier.uri.fsPath`),
+Fields `show` prints: `bcId`, `name`, `class`, `workspaceRootPath`,
+`localFsPath` (from `privateWorkspaceIdentifier.uri.fsPath`),
 `privateWorkerDisplayName`, `cloudTargetKey`, `usePrivateWorker`,
 `hasStartedVm`, `environmentPublicId`, `repoUrl`.
 
-`localFsPath` на диске при `workspaceRootPath=/workspace` — это
-Environment, привязанная к GitHub-репо на этой машине, **не** local-rc.
-`newest` такие сессии не возвращает. `handoff-ok` с uuid проверяет эту
-сессию. Без uuid смотрит новейшую с `since_ms` любого class и отказывает,
-если это не local-rc запрошенной папки.
+A `localFsPath` on disk while `workspaceRootPath=/workspace` is an
+Environment bound to a GitHub repo on this machine, **not** a local-rc.
+`newest` does not return those sessions. `handoff-ok` with a uuid checks
+that session. Without a uuid it looks at the newest of any class since
+`since_ms` and refuses unless it is a local-rc of the requested folder.
 
-Успех новой сессии: `handoff-ok` код 0, не `usePrivateWorker` в одиночку.
+A new session succeeded when `handoff-ok` exits 0, not when
+`usePrivateWorker` is set by itself.
 
 ## Worker not ready
 
-Текст: `Selected private worker is not available` + Request ID.
+The text is `Selected private worker is not available` plus a Request ID.
 
-Ждать процесс из профиля стенда с `--worker-dir` = папка handoff.
-Не ждать worker из `~/.config/Cursor` (это стол / эта RC-сессия оркестратора).
+Wait for a process from the stand profile whose `--worker-dir` is the
+handoff folder. Do not wait for a worker from `~/.config/Cursor` (that is
+the owner's desktop, or this orchestrator's own RC session).
 
 ```bash
 scripts/wait-worker.sh /ABS/PROJECT
-scripts/stand.sh composer-send --id bc-… --dry-run   # где поле ввода, ничего не жмёт
-scripts/stand.sh composer-send --id bc-…             # resend в эту вкладку
+scripts/stand.sh composer-send --id bc-… --dry-run   # where the input box is; presses nothing
+scripts/stand.sh composer-send --id bc-…             # resend into this tab
 ```
 
-`composer-send` ищет поле ввода по снимку: новый чат — над кнопкой «Plan New Idea»,
-переписка — над футером `/path @ <hostname>`. Вид не узнан — не кликает. С `--id`
-отказывает, если открыта другая вкладка (иначе текст уходит в чужую сессию).
+`composer-send` finds the input box on the shot: a new chat is above the
+"Plan New Idea" button, a thread is above the footer
+`/path @ <hostname>`. An unrecognized screen is not clicked. With `--id`
+it refuses when another tab is open (otherwise the text goes into someone
+else's session).
 
-Не New Chat, не второй `handoff` параллельно, не печатать `--api-key`.
+Not a New Chat, not a second `handoff` in parallel, and do not print
+`--api-key`.
 
-Первый convert на Home/No Repo — отдельный отказ (worker not ready /
-Request ID в INVENTORY). Папка обязательна.
+The first convert on Home or No Repo is its own refusal (worker not
+ready, a Request ID). The folder is required.
 
-## IBus и палитра
+## IBus and the palette
 
-`xdotool type` молчит из-за IBus. Везде `clip_paste`: clipboard **этого**
-`$DISP` + ctrl+v, и только если `xclip -o` вернул тот же текст.
+`xdotool type` stays silent because of IBus. Everywhere the script uses
+`clip_paste`: the clipboard of **this** `$DISP` plus ctrl+v, and only if
+`xclip -o` returned the same text.
 
-Search Agents (Ctrl+Alt+P): id вставляется только после проверки, что палитра
-открыта (`palette-open`, до 3 попыток), — 07.10.2026 непроверенная вставка
-уронила bc-id в поле ввода открытой сессии.
-OCR рвёт короткое имя, кириллица каша. `palette-ok`
-должен найти имя **или** bc-id / 12+ символов uuid без дефисов. Не нашёл —
-Escape.
+Search Agents (Ctrl+Alt+P): the id is pasted only after the palette is
+confirmed open (`palette-open`, up to 3 tries). On 2026-10-07 an
+unchecked paste dropped a bc-id into the input box of the open session.
+OCR splits a short name. Cyrillic comes out as noise. `palette-ok` must
+find the name **or** the bc-id / 12+ characters of a uuid without hyphens.
+If it does not, Escape.
 
-## Ловушка 3.23 Environment vs конвертация RC (07.10.2026)
+## The 3.23 Environment trap versus RC conversion (2026-10-07)
 
-На Cursor 3.23 три разных жеста, один из них RC:
+On Cursor 3.23 three different gestures, and one of them is RC:
 
-| жест | что получается |
+| gesture | what you get |
 |---|---|
-| Return в поиске папки, пока виден Recents | Environment, `/workspace` |
-| слэш `/remote-control` | Environment даже при чипе This Computer (`bc-…`) |
-| чип «Run on» → Self-Hosted Worker | выбирает Worker в *новом* чате, кнопка Set up Environment |
-| футер This Computer → Continue on → Self-Hosted Worker | **local-rc** (`bc-…`, `bc-…`) |
+| Return in the folder search while Recents is visible | Environment, `/workspace` |
+| the slash `/remote-control` | Environment even with a This Computer chip (`bc-…`) |
+| the "Run on" chip → Self-Hosted Worker | picks Worker in a *new* chat, button Set up Environment |
+| footer This Computer → Continue on → Self-Hosted Worker | **local-rc** (`bc-…`) |
 
-Промежуточный environment первые секунды после конвертации — не отказ.
-`convert-ok` ждёт `class=local-rc` + папка + воркер, до 90 с.
+An intermediate environment in the first seconds after conversion is not
+a refusal. `convert-ok` waits for `class=local-rc` plus the folder plus
+the worker, up to 90 s.
 
-Не делать: rename сессии Environment в запрошенное имя; слэш; Include Changes;
-считать чип Worker в новом чате локальным RC.
+Do not: rename an Environment session to the requested name; use the
+slash; Include Changes; treat the Worker chip in a new chat as local RC.
 
-Локальный черновик сайдбара (нет `bc-`): если **не** работает — ПКМ →
-**Discard**. Работающий локальный uuid (13.10: handoff упал на convert, агент
-шёл 50 мин) — **не** Discard/Archive: `mine`/`busy` печатают `kind=local`;
-дождаться конца хода → `convert --id`. Не Archive All Below.
-`archive --id` только для записей `cloudAgentRepository`.
+A local sidebar draft (no `bc-`): if it is **not** running, right click →
+**Discard**. A running local uuid (2026-10-13: handoff failed at convert,
+the agent ran for 50 minutes) is **not** Discard or Archive. `mine` /
+`busy` print `kind=local`. Wait until the turn ends, then
+`convert --id`. Not Archive All Below. `archive --id` is only for rows in
+`cloudAgentRepository`.
 
-## Оверлеи, ломающие якоря (13.10.2026)
+## Overlays that break anchors (2026-10-13)
 
-| UI | симптом | действие скрипта |
+| UI | symptom | what the script does |
 |---|---|---|
-| Toast «Agent starting expensive processes» (правый низ, крестик ~1882,970) | `doctor`/handoff: нет `env-this-computer`; `composer-send`: «не узнал экран» | `overlay-scan` → клик крестика; **не** Manage Processes / Don't show again |
-| «Move agent while it's working?» Cancel / Stop and Move | handoff ждал Exclude 90 с, «не стал local-rc»; агент продолжал локально | Cancel или Escape, **отказ**; **никогда** Stop and Move |
+| Toast "Agent starting expensive processes" (bottom right, X near 1882,970) | `doctor` / handoff: no `env-this-computer`; `composer-send`: "did not recognize the screen" | `overlay-scan` → click the X; **not** Manage Processes / Don't show again |
+| "Move agent while it's working?" Cancel / Stop and Move | handoff waited 90 s for Exclude, "did not become local-rc"; the agent kept running locally | Cancel or Escape, then **refuse**; **never** Stop and Move |
 
-`stand_dismiss_overlays` вызывается перед якорями в handoff, convert,
-composer-send (и тем самым в doctor dry-run). Снимки замера:
+`stand_dismiss_overlays` runs before anchors in handoff, convert, and
+composer-send (and therefore in the doctor dry-run). Measurement shots
+live under the profile, not in the repository:
 `var/shots/handoff-fail-convert-211747.png`, `20261013T2225*.png`.
 
-## Якоря UI (glass 1920×1080 @ 0,0, пакет 3.23.23)
+## UI anchors (glass 1920×1080 at 0,0, package 3.23.23)
 
-Таблица в `glass_agents.py` (`ANCHORS`). `anchor SHOT имя` → `x y` или код 1.
-Зона — где искать, не точка клика.
+The table is in `glass_agents.py` (`ANCHORS`). `anchor SHOT name` prints
+`x y` or exits 1. A zone is where to look, not the click point.
 
-| имя | токены | зона (x0,y0,x1,y1) |
+| name | tokens | zone (x0,y0,x1,y1) |
 |---|---|---|
 | `new-chat` | New, Chat | 0,0,260,130 |
-| `folder-chip` | main (клик левее) | 700,450,1100,520 |
+| `folder-chip` | main (click to the left) | 700,450,1100,520 |
 | `folder-search` | repos | 740,490,1100,545 |
-| `folder-result` | main + смещение | только если нет Recents |
+| `folder-result` | main + offset | only when Recents is absent |
 | `env-this-computer` | This, Computer | 880,450,1200,530 |
-| `env-self-hosted` | Worker (чип — стоп) | 880,450,1300,530 |
-| `composer-pos` | Idea / футер hostname | по снимку |
+| `env-self-hosted` | Worker (the chip is a stop) | 880,450,1300,530 |
+| `composer-pos` | Idea / footer hostname | from the shot |
 | `footer-this-computer` | This, Computer | 400,1035,1100,1080 |
 | `send-follow-up` | follow | 400,990,1100,1045 |
-| `convert-self-hosted` | Worker (меню Continue on) | 500,990,1300,1065 |
+| `convert-self-hosted` | Worker (the Continue on menu) | 500,990,1300,1065 |
 | `exclude-changes` | Exclude, Changes | 850,540,1100,650 |
 | `move-working` | Move, working | 650,450,1250,700 |
 | `move-cancel` | Cancel | 900,550,1200,680 |
 | `expensive-processes` | expensive, processes | 1450,920,1920,1080 |
 | `customize` | Customize | 0,140,260,220 |
-| `customize-mcps` | MCPs (запас McpPs) | 850,210,1200,290 |
+| `customize-mcps` | MCPs (fallback McpPs) | 850,210,1200,290 |
 | `customize-search` | Search | 700,170,1100,230 |
-| `mcp-done` | Done (или синяя кнопка) | 1000,640,1250,740 |
+| `mcp-done` | Done (or the blue button) | 1000,640,1250,740 |
 
-Крестик toast: `find_expensive_dismiss` (OCR `x` у 1840–1915,945–995 или
-fallback 1882,970). `convert` / handoff после первого READY зовут
-`glass_convert_to_rc` (общий код). Локальный uuid до convert часто **нет** в
-Search Agents — `convert --id` работает, если вкладка уже открыта (сразу после
-`handoff --no-convert`); иначе отказ с подсказкой, не New agent.
+The toast X: `find_expensive_dismiss` (OCR `x` near 1840–1915, 945–995, or
+fallback 1882,970). After the first READY, `convert` and handoff call
+`glass_convert_to_rc` (shared code). A local uuid before convert is often
+**absent** from Search Agents. `convert --id` works when the tab is
+already open (right after `handoff --no-convert`). Otherwise it refuses
+with a hint, and it does not open New agent.
 
 MCP: `mcp list|find|enable|disable|add` → Customize → MCPs → Configure →
-тоггл источника (зелёный = on). OCR имён короткие (`mt5`↔`mts`, `n8n`↔`nan`
-или `gn` из-за иконки); повторный OCR вырезки имени, затем сверка с
-mcp.json. Подстрока короче 3 символов именем не считается: «-» и «e»
-раньше совпадали с любым известным сервером. Статус строки — `enabled`,
-`disabled` или `error` (Needs Attention, «Error Show Output»).
-`mcp-toggle` по пикселям дорожки. Не путать с Cloud Agents MCP dashboard.
-Поиск Customize (`customize-search`) не кликать — ломает вкладки панели.
+the source toggle (green = on). OCR of short names is loose (`mt5`↔`mts`,
+`n8n`↔`nan` or `gn` because of the icon). It OCRs the name crop again,
+then compares with mcp.json. A substring shorter than 3 characters is not
+a name: "-" and "e" used to match every known server. The row status is
+`enabled`, `disabled`, or `error` (Needs Attention, "Error Show Output").
+`mcp-toggle` reads pixels of the track. Do not confuse this with the
+Cloud Agents MCP dashboard. Do not click Customize search
+(`customize-search`): it breaks the panel tabs.
 
-## Settings → Agents (22.11.2026, Cursor 3.30.14)
+## Settings → Agents (2026-11-22, Cursor 3.30.14)
 
-`settings agents` — только чтение. Клик ищет надпись и отказывается, если
-точка ближе 42 px к Unregister, Log Out, Docs, Build, Manage или если
-строка Agents — это Cloud Agents.
+`settings agents` is read only. A click looks for the label and refuses
+if the point is closer than 42 px to Unregister, Log Out, Docs, Build, or
+Manage, or if the Agents row is Cloud Agents.
 
-| шаг | что ищем | куда не кликать |
+| step | what it looks for | where it does not click |
 |---|---|---|
-| `file` | File в строке меню | |
-| `settings-item` | Settings, и рядом Exit | меню проекта (Log Out / Manage Environment) |
-| `agents-nav` | Agents или «gents», если иконка съела букву | Cloud Agents, карточка Build on App |
-| `back` | Back | поиск Settings |
+| `file` | File in the menu bar | |
+| `settings-item` | Settings, with Exit nearby | the project menu (Log Out / Manage Environment) |
+| `agents-nav` | Agents, or "gents" if the icon ate the letter | Cloud Agents, the Build on App card |
+| `back` | Back | Settings search |
 
-Тумблер: зелёная дорожка x≈1386–1417 = on, серая ≈213,213,213 = off.
-Выпадающий список читается вырезкой справа от подписи, не абзацем под ней.
-Низ страницы — «Allowlist Options» или «always-allowed», не слово
-Allowlists в абзаце Run Mode. На 22.11 ниже ещё Legacy Terminal Tool.
+A toggle: a green track at x≈1386–1417 means on, grey ≈213,213,213 means
+off. A dropdown is the crop to the right of the label, not the paragraph
+under it. The bottom of the page is "Allowlist Options" or
+"always-allowed", not the word Allowlists in the Run Mode paragraph. On
+2026-11-22, Legacy Terminal Tool is further down.
 
-**UI ≠ lease RC.** `mcp find` / «N tools
-enabled» — только Customize. Агент local-rc видит MCP, когда private worker
-положил канон в
+**UI is not an RC lease.** `mcp find` / "N tools enabled" is only
+Customize. A local-rc agent sees MCP when the private worker has written
+the canon into
 `$PROFILE/…/cursor-agent-worker/worker-data/<id>/projects/<slug>/mcps/<NAME>/`
-(`SERVER_METADATA.json` + `tools/`). Если проектный `.cursor/mcp.json` +
-enable не дают namespace в сессии — добавить тот же сервер в user
-`~/.cursor/mcp.json` (`mcp add --user`), снова `enable`, открыть вкладку
-папки, дождаться кэша; проверить `composer-send` («namespace … ready»).
-Дубли кэша `project-0-<NAME>`, `user-<NAME>` — побочный эффект смены
-идентификатора источника; после `ready` канон `<NAME>` оставить, дубли
-можно снести. Ручная подкладка tool-файлов в кэш — не делать (stale
-lease). Успех для пользователя «сессия увидела MCP» = ответ агента /
-namespace `ready`, не строка в `mcp list`.
+(`SERVER_METADATA.json` plus `tools/`). If a project `.cursor/mcp.json`
+plus enable still do not put the namespace in the session, add the same
+server to the user `~/.cursor/mcp.json` (`mcp add --user`), `enable`
+again, open the folder's tab, and wait for the cache. Check with
+`composer-send` ("namespace … ready"). Cache duplicates `project-0-<NAME>`
+and `user-<NAME>` are a side effect of the source id changing. After
+`ready`, leave the canon `<NAME>` and the duplicates can go. Do not plant
+tool files in the cache by hand (a stale lease). For the user, "the
+session saw MCP" means the agent's reply or namespace `ready`, not a line
+in `mcp list`.
 
-Rename/archive: X=120, Y=яркая полоса сайдбара; Y<130 = New Chat, отказ.
-Если `shot` после шага — не тот UI: стоп, не крутить числа с голоса.
+Rename and archive: X=120, Y=the bright sidebar band. Y<130 is New Chat,
+a refusal. If `shot` after a step is the wrong UI, stop. Do not tune
+numbers from chat.
 
-`up` без пути проекта. Если IDE — палитра «Open Agents Window» (скрипт).
-IME в `up`: `GTK_IM_MODULE=xim`, `XMODIFIERS=""`.
+`up` takes no project path. If the IDE is up, the palette is "Open Agents
+Window" (the script). IME in `up`: `GTK_IM_MODULE=xim`, `XMODIFIERS=""`.
 
-dbus: не экспортировать мёртвый адрес из `state.env` (`dbus_addr_alive`).
-Не писать `DBUS_SESSION_BUS_ADDRESS=...` словом перед бинарём (bash ищет
-файл). `--password-store=basic` (gnome-keyring на стенде ломал логин).
+dbus: do not export a dead address from `state.env` (`dbus_addr_alive`).
+Do not write `DBUS_SESSION_BUS_ADDRESS=...` as a word in front of the
+binary (bash looks for a file). `--password-store=basic` (gnome-keyring
+broke login on the stand).
 
-## Тема, плейсхолдеры, правая панель (10.10.2026)
+## Theme, placeholders, the right panel (2026-10-10)
 
-- **Тема меняется по времени суток.** В профиле стенда
-  `window.autoDetectColorScheme: true`, поэтому днём glass светлый, ночью тёмный.
-  Всё, что смотрит на яркость, обязано работать в обе стороны: выделенная строка
-  сайдбара в тёмной теме светлее фона, в светлой — темнее (`sidebar_selected_y`
-  берёт отклонение от базового фона). Якоря OCR от темы не зависят.
-- **Надписи плывут без смены версии пакета.** 3.23.23 тот же, а плейсхолдер
-  пикера папки стал «Search repos, cloud environments…», модель в чипе — другой.
-  Серый плейсхолдер tesseract читает нестабильно («repos,» → «re» + «5,»;
-  «environments.» / «environment:»). У якоря может быть запасной набор слов —
-  ключ `alt` в `ANCHORS`; сравнение — подстрока от 3 символов.
-- **Правая панель** сдвигает чат влево и ломает зоны якорей. `close_right_panel`
-  находит её границу на снимке и закрывает переключателем в правом верхнем углу.
-- **Выделенным может быть локальный черновик** без записи в профиле (после
-  `archive` или Discard остаётся пустой New Chat) — `selected` вернёт uuid,
-  которого нет в списке агентов; это не ошибка.
-- **Ключ воркера.** `workers` патчит установленные `cursor-agent`, чтобы
-  `--api-key` уходил в `CURSOR_API_KEY`; в `ps` ключа больше нет. Проверять
-  счётчиком по `/proc/PID/cmdline`, значение не печатать.
+- **The theme follows the time of day.** The stand profile has
+  `window.autoDetectColorScheme: true`, so glass is light by day and dark
+  at night. Anything that looks at brightness has to work both ways: the
+  selected sidebar row is lighter than the background in the dark theme
+  and darker in the light theme (`sidebar_selected_y` uses the offset from
+  the base background). OCR anchors do not depend on the theme.
+- **Labels drift without a package version change.** 3.23.23 stayed the
+  same, and the folder picker placeholder became "Search repos, cloud
+  environments…", and the model in the chip changed. Tesseract reads a
+  grey placeholder unstably ("repos," → "re" + "5,"; "environments." /
+  "environment:"). An anchor may have a spare word set, the `alt` key in
+  `ANCHORS`. Comparison is a substring of 3 characters or more.
+- **The right panel** shifts the chat left and breaks anchor zones.
+  `close_right_panel` finds its edge on the shot and closes it with the
+  toggle in the top right corner.
+- **The selection may be a local draft** with no row in the profile (after
+  `archive` or Discard an empty New Chat remains). `selected` then returns
+  a uuid that is not in the agent list. That is not an error.
+- **The worker key.** `workers` patches the installed `cursor-agent` so
+  `--api-key` moves into `CURSOR_API_KEY`. The key is no longer in `ps`.
+  Check with a count over `/proc/PID/cmdline`. Do not print the value.
 
-## Обновление до 3.30
+## The move to 3.30
 
-- **Палитра Search Agents → «Search chats…»** (вкладки All/Chats/Files). Ctrl+Alt+P
-  тот же; `palette-open` узнаёт оба вида. Поиск по bc-id работает.
-- **Правая панель Changes открывается после выбора папки-репо**, не сразу после
-  New Chat. `handoff` закрывает её второй раз перед проверкой чипа среды.
-- **Новый Cursor тянет новый agent CLI** (`Downloading Cursor Agent <ver>`), таймаут
-  загрузки в расширении 120 с. На канале LTE (~170 МБ при ~1 МБ/с) он не успевает:
-  `Activation failed: AbortError`, воркеры не поднимаются, `ensure` крутит
-  перезапуски Cursor. Лечение: версию из лога расширения
-  (`logs/*/window*/exthost/anysphere.cursor-agent-worker/`) скачать руками без
-  таймаута — `https://downloads.cursor.com/lab/<ver>/linux/x64/agent-cli-package.tar.gz` —
-  и распаковать `--strip-components=1` в
+- **The Search Agents palette became "Search chats…"** (All/Chats/Files
+  tabs). Ctrl+Alt+P is the same. `palette-open` recognizes both shapes.
+  Search by bc-id works.
+- **The Changes panel on the right opens after a repo folder is chosen,**
+  not immediately after New Chat. `handoff` closes it a second time before
+  checking the environment chip.
+- **A new Cursor pulls a new agent CLI** (`Downloading Cursor Agent
+  <ver>`). The extension's download timeout is 120 s. On a slow link
+  (~170 MB at ~1 MB/s) it does not finish: `Activation failed:
+  AbortError`, workers do not come up, and `ensure` keeps restarting
+  Cursor. The fix: take the version from the extension log
+  (`logs/*/window*/exthost/anysphere.cursor-agent-worker/`) and download
+  it by hand with no timeout —
+  `https://downloads.cursor.com/lab/<ver>/linux/x64/agent-cli-package.tar.gz`
+  — then unpack `--strip-components=1` into
   `$PROFILE/User/globalStorage/anysphere.cursor-agent-worker/agent-cli/.local/share/cursor-agent/versions/<ver>/`
-  (через `.tmp-…` и `mv`). Затем `stand.sh workers`: он сначала патчит launcher
-  (ключ вне argv), потом открывает вкладки. Таймер на время ручной работы — `stop`, не `disable`.
+  (via `.tmp-…` and `mv`). Then `stand.sh workers`: it patches the
+  launcher first (the key leaves argv), then opens the tabs. While doing
+  this by hand, `stop` the timer. Do not `disable` it.
 
 ## park / ensure
 
-`park` убивает PID, у которых cmdline содержит профиль стенда + worker
-start оттуда. Оркестратор с worker-dir в `~/.config/Cursor` не цель, но
-копия infra-worker **стенда** на том же сокете — цель: park оборвёт её
-тулы (замер park→up). Не park себя без просьбы.
+`park` kills PIDs whose command line contains the stand profile plus a
+worker start from there. An orchestrator whose worker-dir is
+`~/.config/Cursor` is not a target, but a copy of the stand's
+infra-worker on the same socket is: park cuts its tools (measured
+park→up). Do not park yourself unless asked.
 
-`ensure`: если экран/Cursor не целые — `up`; потом `workers` (открыть
-вкладку каждой папки `@ hostname`). Если воркеры мертвы при живом Cursor —
-перезапуск GUI не чаще раза в 30 мин (`var/last-restart`), без `hold`, и только
-если нет работающего агента (`glass.sh busy`): перезапуск обрывает его ход.
-Поднятый воркер возобновляет агента с незавершённым ходом (07.10.2026 так ожил
-«Greeting conversation») — после `workers` проверь `busy`.
+`ensure`: if the screen or Cursor is not whole, `up`; then `workers`
+(open a tab for each folder `@ hostname`). If the workers are dead while
+Cursor is alive, it restarts the GUI at most once in 30 minutes
+(`var/last-restart`), without `hold`, and only when no agent is running
+(`glass.sh busy`): a restart cuts that turn. A worker that comes up
+resumes an agent with an unfinished turn (on 2026-10-07 that revived
+"Greeting conversation"). After `workers`, check `busy`.
 
-## Секреты
+## Secrets
 
-В cmdline worker есть `--api-key`. В ответах, git, скилле, снимках
-чата — вырезать. Снимки сайдбара содержат имена сессий; в репо не класть
-(`$PROFILE/var/shots/`). Креды логина glass не в git.
+A worker command line contains `--api-key`. Cut it out of replies, git,
+the skill, and chat screenshots. Sidebar shots contain session names. Do
+not put them in the repo (`$PROFILE/var/shots/`). Glass login credentials
+do not go in git.
 
-## Прокси
+## Proxy
 
-`CURSOR_STAND_PROXY` пустой — `up` прокси не требует. Если задан и это
-localhost, `up` проверяет, что порт слушает. Число порта — в
-`config/hosts/<host>.env`, не в скрипте. Чужой порт не подставлять без `ss`.
+An empty `CURSOR_STAND_PROXY` means `up` does not require a proxy. If it
+is set and it is localhost, `up` checks that the port is listening. The
+port number lives in `config/hosts/<host>.env`, not in the script. Do not
+substitute someone else's port without `ss`.

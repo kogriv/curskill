@@ -1,45 +1,82 @@
 # curskill
 
-Отдельный X11-экран для Cursor Agents Window и Remote Control: свой
-`DISPLAY`, свой профиль, мышь стола владельца не трогает.
+Russian: [README.ru.md](README.ru.md). English is the copy to follow.
 
-Скилл называется `curskill`. Команда стенда — `automation/cursor-stand.sh`.
-Профиль по умолчанию — `~/.local/share/cursor-stand`.
+A separate X11 display for Cursor Agents Window and Remote Control.
+Its own `DISPLAY`, its own profile. It does not touch the mouse on the
+owner's desktop.
 
-## Где работает
+The skill is named `curskill`. The stand command is
+`automation/cursor-stand.sh`. The default profile is
+`~/.local/share/cursor-stand`.
 
-Linux и X11. Экран — NVIDIA Xorg на отдельном `DISPLAY` или Xvfb, если
-карты нет. Выбор: `CURSOR_STAND_X=auto|xorg|xvfb`.
+## Why
 
-Не обещает и не проверялось: AMD, Intel iGPU, Wayland, Windows, macOS.
+Cursor can run an agent in three ways, and they are not the same session.
 
-Как ставить на новую машину, что уже должно быть в системе и что писать
-в файл хоста: [SETUP.md](SETUP.md). `skill/scripts/setup.sh` проверяет
-команды и сам пакеты не ставит. Установку с пустой системы гоняет
-`docker/test-fresh-install.sh`: контейнер, не этот хост.
+- Cloud Agents: the model and the tools run in Cursor's cloud.
+- The terminal `agent` CLI: a process on this machine, with its own chat
+  store. It is not an Agents Window tab.
+- Agents Window with Remote Control: the chat is the desktop app, and the
+  tools run here as a private self-hosted worker.
 
-## Установка скилла
+There is no API for "open a new Agents Window tab and attach Remote
+Control". The slash `/remote-control` does not do that. On the builds this
+stand was measured against, that slash starts an Environment session (a
+cloud workspace at `/workspace`), not a worker on this computer.
 
-Из корня клона:
+Clicking the owner's real desktop is the wrong tool for the same job.
+Those clicks move the owner's mouse and take the keyboard.
+
+`automation/cursor-stand.sh` is the repeatable way. It raises a second X11
+display the owner is not sitting at, opens Cursor Agents there at a fixed
+size, and clicks only that display. Anchors come from OCR of the picture
+on that display, not from coordinates typed in chat. Text is pasted from
+the clipboard, because `xdotool type` is swallowed by the input method.
+Success is a row in the stand's own profile database: class `local-rc`,
+the folder you asked for on this disk, and a worker named `@ this
+hostname`. A screenshot that says "This Computer" is not success.
+
+One machine has one stand. Another agent is another tab, not another X
+server. A second Xorg on a GPU someone is watching can blink their
+monitor, so the stand is not brought up until a person says to.
+
+## Where it runs
+
+Linux and X11. The screen is NVIDIA Xorg on its own `DISPLAY`, or Xvfb
+when there is no such GPU. Choose with `CURSOR_STAND_X=auto|xorg|xvfb`.
+
+Not promised and not tested: AMD, Intel iGPU, Wayland, Windows, macOS.
+
+What must already be installed, and what to write in the host file:
+[SETUP.md](SETUP.md). `skill/scripts/setup.sh` checks commands and does
+not install packages. A from-scratch install is exercised in a container,
+not on this host: `docker/test-fresh-install.sh`.
+
+## Install the skill
+
+From the clone root:
 
 ```bash
 ./install/install.sh
 ```
 
-Скрипт вешает симлинки:
+The script creates symlinks:
 
 - `~/.cursor/skills/curskill` → `skill/`
 - `~/.claude/skills/curskill` → `skill/`
 
-и, если файла ещё нет, копирует `config/hosts/example.env.example` в
-`config/hosts/$(hostname).env`. Этот `.env` в git не входит. Туда пишутся
-порт прокси, пути и список сессий, которые `archive` не трогает.
+and, if the file is not there yet, copies
+`config/hosts/example.env.example` to `config/hosts/$(hostname).env`.
+That `.env` is not in git. It holds the proxy, paths, and the sessions
+`archive` must leave alone.
 
-`install.sh` стенд не поднимает и таймер systemd не переключает.
+`install.sh` does not start the stand and does not switch the systemd
+timer.
 
-Без файла хоста прокси нет, список `archive` пуст, экран —
-`automation/display/stand-display.sh`.
+With no host file there is no proxy, the `archive` list is empty, and the
+screen is `automation/display/stand-display.sh`.
 
-## Лицензия
+## License
 
 [MIT](LICENSE).

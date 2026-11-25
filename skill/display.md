@@ -1,108 +1,118 @@
-# Экран стенда Cursor
+# The Cursor stand's screen
 
-Источник правды по запуску X: `automation/display/stand-display.sh`.
-Этот текст — для агента, чтобы не путать стол, GPU и VNC.
+Russian: [display.ru.md](display.ru.md). English is the copy to follow.
 
-## Зачем отдельный X-сервер
+How X is started: `automation/display/stand-display.sh`.
+This text is so an agent does not mix up the owner's desktop, the GPU, and VNC.
 
-Computer-use по `:1` крадёт фокус и ввод владельца. Стенд — второй X11
-с одним окном «Cursor Agents». Человек смотрит стол или телефон; агент
-кликает только `$CURSOR_STAND_DISPLAY` (дефолт `:105`).
+## Why a separate X server
 
-Это **не**:
+Computer use on `:1` takes the owner's focus and input. The stand is a
+second X11 server with one window, "Cursor Agents". The person looks at
+their desktop or a phone. The agent clicks only `$CURSOR_STAND_DISPLAY`
+(default `:105`).
 
-- окно Cursor на рабочем столе, сдвинутое в угол;
-- Xvfb «по умолчанию, чтобы не трогать GPU»;
-- Wayland / weston / cage;
-- второй GPU-сервер «на каждую сессию».
+The stand is not:
 
-Новые агенты — вкладки **того же** glass на **том же** `:105`.
+- a Cursor window pushed into a corner of the owner's desktop;
+- Xvfb "by default, so we do not touch the GPU";
+- Wayland, weston, or cage;
+- a second GPU server "per session".
 
-## Размещение окна
+New agents are tabs of the **same** glass on the **same** `:105`.
 
-После `up` / перед handoff скрипт:
+## Where the window sits
 
-1. ищет окно с именем `Cursor Agents` на `$DISP`;
+After `up`, and before handoff, the script:
+
+1. finds the window named `Cursor Agents` on `$DISP`;
 2. `windowactivate`, `windowmove 0 0`, `windowsize 1920 1080`.
 
-Калибровка `handoff` / `composer-send` / клик слэша **прибита** к этому
-гео **и к Cursor 3.21**. Если glass 1280×800 не в нуле (бывало после
-park→up без нормализации) — клики уезжают. Скрипт нормализует сам; руками
-размер не подбирать. Смена мажора Cursor (замер 3.23.23: пикер Environment)
-— не крутить координаты, см. [reference.md](reference.md).
+`handoff`, `composer-send`, and the slash click are calibrated to that
+geometry and to Cursor 3.21. If glass is 1280×800 and not at the origin
+(that happened after park→up without normalizing), clicks miss. The
+script normalizes the window. Do not pick a size by hand. A new Cursor
+major (measured on 3.23.23: the Environment picker) is not a reason to
+tune coordinates. See [reference.md](reference.md).
 
-Просмотр: `x11vnc -display :105 -rfbport 5916 -localhost -forever -shared
--nopw`. Снаружи машины порт не слушает. Пароль VNC в git не класть.
+Viewing: `x11vnc -display :105 -rfbport 5916 -localhost -forever -shared
+-nopw`. The port does not listen outside the machine. Do not put a VNC
+password in git.
 
-Стол владельца скрипт не перемещает. Мышь `:1` до и после операции должна
-совпасть, либо статус `unavailable` (на машине нет мыши `:1`). Сдвиг при `unavailable` не
-проверяется; сдвиг при живой мыши — «изоляция сломана», если это не сам
-владелец за столом.
+The script does not move the owner's desktop. The `:1` mouse before and
+after an operation must match, or the status is `unavailable` (that
+machine has no `:1` mouse). A move while `unavailable` is not checked.
+A move while the mouse is alive means isolation is broken, unless the
+owner at the desk moved it.
 
-## Чем рисовать: GPU Xorg vs Xvfb
+## What draws it: GPU Xorg or Xvfb
 
-Переменная `CURSOR_STAND_X` (`auto` \| `xorg` \| `xvfb`), дефолт `auto`.
-Это **текущая схема**. Скилл отдельного меню не рисует: либо оставь
-`auto`, либо пользователь явно просит `xorg`/`xvfb`. Перед `up`:
+`CURSOR_STAND_X` is `auto`, `xorg`, or `xvfb`. The default is `auto`.
+This is the current scheme. The skill does not ask in chat: leave
+`auto`, or the person explicitly asks for `xorg` or `xvfb`. Before `up`:
 
 ```bash
 scripts/pick-display.sh
 ```
 
-### `auto` (дефолт)
+### `auto` (default)
 
-`stand_pick_xserver` берёт **xorg-nvidia**, если все истинны:
+`stand_pick_xserver` picks **xorg-nvidia** when all of these are true:
 
-- файл `$CURSOR_STAND_NVIDIA_DRV` (дефолт
+- the file `$CURSOR_STAND_NVIDIA_DRV` (default
   `/usr/lib/x86_64-linux-gnu/nvidia/xorg/nvidia_drv.so`);
-- xorg-conf рядом со скриптом экрана (`xorg-nvidia-headless.conf`);
-- бинарь `Xorg`;
-- passwordless: `sudo -n true` либо NOPASSWD на
-  `/usr/local/sbin/curskill-xorg` (обёртка сама ставит BusID из `lspci`).
+- the xorg config next to the screen script (`xorg-nvidia-headless.conf`);
+- the `Xorg` binary;
+- passwordless root: `sudo -n true`, or NOPASSWD on
+  `/usr/local/sbin/curskill-xorg` (the wrapper sets BusID from `lspci`).
 
-Иначе печатает `ВНИМАНИЕ: … — поднимаю Xvfb` и возвращает `xvfb`.
-Тихого отката нет — это специально (SwiftShader съедает ядро без слова).
+Otherwise it prints a warning and returns `xvfb`. There is no silent
+fallback. That is on purpose: SwiftShader burns a core without saying so.
 
 ### `xorg`
 
-Та же проверка; при любой дыре — **exit**, не Xvfb. Ставь, когда GPU
-обязателен (замер, человек сказал «только карта»).
+The same checks. Any gap is an **exit**, not Xvfb. Use this when the GPU
+is required (a measurement, or the person said "the card only").
 
 ### `xvfb`
 
-Сразу `Xvfb :105 -screen 0 1920x1080x24`. Root не нужен. Electron на
-программном рендере. Для разовой сессии на машине без NVIDIA — ок; для
-постоянной работы на NVIDIA — нет, пока карта жива.
+Straight to `Xvfb :105 -screen 0 1920x1080x24`. Root is not required.
+Electron uses software rendering. Fine for one session on a machine
+without NVIDIA. Not fine for steady work on a living NVIDIA card.
 
-Нет ветки «AMD», «Intel», «CUDA», «второй монитор». Нет выбора
-«окно на :1, если GPU занят».
+There is no AMD branch, no Intel branch, no CUDA branch, no "second
+monitor" branch. There is no "a window on `:1` if the GPU is busy".
 
-## Конфиг GPU Xorg
+## GPU Xorg config
 
-`AutoAddGPU off`, `AutoAddDevices off`, `DontVTSwitch`, виртуальный
+`AutoAddGPU off`, `AutoAddDevices off`, `DontVTSwitch`, a virtual
 1920×1080, `UseDisplayDevice None`, `AllowEmptyInitialConfiguration`.
-Без этого второй Xorg через udev заберёт клавиатуру в окно стенда.
+Without that, a second Xorg takes the keyboard into the stand window
+through udev.
 
-BusID в репозитории — заглушка `PCI:0:0:0`. Обёртка `curskill-xorg`
-переписывает его из `lspci` перед стартом. Чужой слот в конфиг не
-писать. Уже живой `:105` команда `up` не пересоздаёт.
+The BusID in the repository is the placeholder `PCI:0:0:0`. The
+`curskill-xorg` wrapper rewrites it from `lspci` before start. Do not
+write someone else's slot into the config. `up` does not recreate a
+`:105` that is already alive.
 
-Остановка: PID из `/tmp/.X<N>-lock` / state, только этот `$disp`.
-Никогда `pkill Xorg` — на той же карте может жить стол `:1`.
+Stop by the PID from `/tmp/.X<N>-lock` or from state, and only that
+`$disp`. Never `pkill Xorg`: the owner's desktop `:1` may be on the same
+card.
 
-`up` при уже живом `:105` не стартует второй сервер, только
-`adopt_if_live`.
+When `:105` is already alive, `up` does not start a second server. It
+only adopts the live one.
 
-## Номер дисплея
+## Display number
 
-Калибровка прибита к `:105` и VNC `5916`. Другой номер — только если
-этот занят, и тогда якоря надо снимать заново.
+Calibration is pinned to `:105` and VNC `5916`. Another number only if
+that one is taken, and then the anchors have to be measured again.
 
-## Env, которые трогают экран
+## Env that touches the screen
 
 `CURSOR_STAND_DISPLAY`, `CURSOR_STAND_VNC`, `CURSOR_STAND_ORIG_DISPLAY`,
 `CURSOR_STAND_DISPLAY_SH`, `CURSOR_STAND_X`, `CURSOR_STAND_NVIDIA_DRV`,
 `CURSKILL_XORG`.
 
 `unset WAYLAND_DISPLAY`; `GDK_BACKEND=x11`, `QT_QPA_PLATFORM=xcb`,
-IME `xim` (иначе IBus глотает `xdotool type` — поэтому type запрещён).
+IME `xim` (otherwise IBus swallows `xdotool type`, which is why typing
+is forbidden).

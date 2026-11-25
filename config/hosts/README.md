@@ -1,18 +1,22 @@
-# Профили машин
+# Machine profiles
 
-Порядок и требования к системе — [SETUP.md](../../SETUP.md).
-Скрипт читает `config/hosts/$(hostname).env`, если нет `CURSOR_STAND_CONFIG`.
-Живой `.env` в git не входит. Логин, порты, пути и список сессий, которые
-`archive` не трогает, пишутся только туда.
+Russian: [README.ru.md](README.ru.md). English is the copy to follow.
+Install order and system requirements: [SETUP.md](../../SETUP.md).
 
-Образец пустой: `example.env.example`. `install/install.sh` копирует его в
-`.env`, только когда своего файла ещё нет и нет `$(hostname).env.example`.
-Таймер стенда и бинари в `/usr/local` он не меняет.
+The script reads `config/hosts/$(hostname).env` unless `CURSOR_STAND_CONFIG`
+is set. The live `.env` is not in git. A login, ports, paths, and the
+sessions `archive` must not touch are written only there.
 
-Пустой `CURSOR_STAND_DISPLAY_SH` — экран из `automation/display/stand-display.sh`.
-Дисплей не `:105` для обёртки `curskill-xorg` — одна строка `:N` в
-`/etc/cursor-stand/display`. Без файла обёртка пускает только `:105`.
+The empty sample is `example.env.example`. `install/install.sh` copies it
+to `.env` only when that file does not exist yet and there is no
+`$(hostname).env.example`. It does not change the stand timer or the
+binaries in `/usr/local`.
 
-Стол владельца не кликать. Второй Xorg на видеокарте может моргнуть
-физический экран — не делать `up`, если у монитора человек. Живой экран
-`up` не пересоздаёт.
+An empty `CURSOR_STAND_DISPLAY_SH` means the screen script
+`automation/display/stand-display.sh`. A display other than `:105` for
+the `curskill-xorg` wrapper is one line `:N` in
+`/etc/cursor-stand/display`. With no file, the wrapper allows only `:105`.
+
+Do not click the owner's desktop. A second Xorg on the GPU can blink the
+physical screen. Do not `up` while a person is at that monitor. `up` does
+not recreate a screen that is already alive.

@@ -1,159 +1,164 @@
-# Установка curskill
+# Installing curskill
 
-Этот файл читают и человек, и агент. Он про первую машину: что уже должно
-стоять в системе, что копируется из репозитория и какие строки писать в
-файл хоста. Стенд здесь не поднимается.
+Russian: [SETUP.ru.md](SETUP.ru.md). English is the copy to follow.
 
-Порядок такой:
+A person and an agent both read this file. It is about the first machine:
+what must already be installed, what is copied from the repository, and
+which lines to write in the host file. This file does not start the stand.
 
-1. Проверить систему (`skill/scripts/setup.sh`). Недостающее показать человеку.
-2. Поставить пакеты, только когда человек согласился.
-3. `./install/install.sh` — симлинки скилла и пустой файл хоста.
-4. Заполнить `config/hosts/$(hostname).env` по комментариям в нём.
-5. `cursor-proxy`, обёртка Xorg и таймер — отдельное согласие.
-6. Поставить `CURSKILL_SETUP_DONE=1`.
-7. `up` и таймер — только после фразы человека «поднимай».
+Order:
 
-Пока `CURSKILL_SETUP_DONE` не равен `1`, `doctor` по glass не кликает.
+1. Check the machine (`skill/scripts/setup.sh`). Show the person what is missing.
+2. Install packages only after the person agrees.
+3. `./install/install.sh` — skill symlinks and an empty host file.
+4. Fill `config/hosts/$(hostname).env` from the comments in that file.
+5. `cursor-proxy`, the Xorg wrapper, and the timer are a separate yes.
+6. Set `CURSKILL_SETUP_DONE=1`.
+7. `up` and the timer only after the person says to bring the stand up.
 
-## Что уже должно быть установлено
+Until `CURSKILL_SETUP_DONE` is `1`, `doctor` does not click the glass UI.
 
-Linux и X11. Wayland, Windows и macOS этот стенд не рисует.
-AMD и Intel как видеокарта стенда не проверялись.
+## What must already be installed
 
-Пакет Cursor для Linux ставит человек. Вход в аккаунт тоже он.
-Агент не копирует `state.vscdb` и не переносит логин.
+Linux and X11. This stand does not draw on Wayland, Windows, or macOS.
+AMD and Intel were not tested as the stand's GPU.
 
-Команды, без которых `doctor` кончается отказом:
+The person installs the Cursor package for Linux and signs in.
+The agent does not copy `state.vscdb` and does not move a login.
 
-| Команда | Пакет Debian/Ubuntu | Зачем |
+Commands without which `doctor` fails:
+
+| Command | Debian/Ubuntu package | Why |
 |---|---|---|
-| `xdotool` | `xdotool` | клики на экране стенда |
-| `xclip` | `xclip` | вставка текста, `xdotool type` здесь не работает |
-| `python3` | `python3` | разбор сессий |
-| `import` или `scrot` | `imagemagick` или `scrot` | снимок экрана, достаточно одной |
-| Pillow | `python3-pil` | разбор снимка |
-| `tesseract` | `tesseract-ocr` и `tesseract-ocr-eng` | якоря кнопок |
-| `Xorg` | `xserver-xorg-core` | команда нужна даже если экран будет Xvfb |
-| `xdpyinfo` | `x11-utils` | жив ли дисплей |
+| `xdotool` | `xdotool` | clicks on the stand's screen |
+| `xclip` | `xclip` | paste text; `xdotool type` does not work here |
+| `python3` | `python3` | read sessions |
+| `import` or `scrot` | `imagemagick` or `scrot` | a screenshot; one of the two is enough |
+| Pillow | `python3-pil` | read the screenshot |
+| `tesseract` | `tesseract-ocr` and `tesseract-ocr-eng` | button anchors |
+| `Xorg` | `xserver-xorg-core` | the binary is required even when the screen will be Xvfb |
+| `xdpyinfo` | `x11-utils` | is the display alive |
 
-`skill/scripts/setup.sh` печатает, чего из этого нет, и сам пакеты не ставит.
-Имена пакетов выше — Debian и Ubuntu. На другом дистрибутиве нужны те же команды.
+`skill/scripts/setup.sh` prints which of these are missing and does not
+install packages. The package names above are Debian and Ubuntu. Another
+distribution needs the same commands.
 
-Дальше развилка, это не общий обязательный набор:
+The rest is a fork, not one required set:
 
-| Команда или файл | Если нет |
+| Command or file | If it is missing |
 |---|---|
-| `xrandr` (`x11-xserver-utils`) | пустой экран не получит монитор |
-| `Xvfb` (`xvfb`) | откат с видеокарты невозможен |
-| драйвер NVIDIA и passwordless sudo | `auto` поднимает Xvfb, не GPU |
-| `openbox`, `x11vnc` | `up` может не довести окно и просмотр |
-| язык `rus` у tesseract | имя сессии надёжнее давать через `--id` |
-| мышь на `:1` | изоляцию стола не измерить, handoff это не запрещает |
-| прокси | пустой `CURSOR_STAND_PROXY` значит ходить напрямую |
-| таймер systemd | стенд поднимается только руками, командой `up` |
+| `xrandr` (`x11-xserver-utils`) | an empty screen gets no monitor |
+| `Xvfb` (`xvfb`) | no fallback off the GPU |
+| NVIDIA driver and passwordless sudo | `auto` raises Xvfb, not the GPU |
+| `openbox`, `x11vnc` | `up` may not finish the window and the viewer |
+| tesseract language `rus` | pass the session name with `--id` |
+| a mouse on `:1` | desktop isolation cannot be measured; handoff is still allowed |
+| a proxy | empty `CURSOR_STAND_PROXY` means connect directly |
+| a systemd timer | the stand comes up only by hand, with `up` |
 
-## Три двери
+## Three doors
 
-### 1. Скилл
+### 1. The skill
 
-Из корня клона:
+From the clone root:
 
 ```bash
 ./install/install.sh
 ```
 
-Появятся симлинки `~/.cursor/skills/curskill` и
-`~/.claude/skills/curskill`. Если своего файла ещё нет, копируется
-`config/hosts/example.env.example` в `config/hosts/$(hostname).env`.
-Этот файл в git не входит.
+This creates `~/.cursor/skills/curskill` and
+`~/.claude/skills/curskill`. If there is no host file yet, it copies
+`config/hosts/example.env.example` to `config/hosts/$(hostname).env`.
+That file is not in git.
 
-`install.sh` не ставит пакеты, не пишет sudoers, не включает таймер и
-не запускает экран.
+`install.sh` does not install packages, does not write sudoers, does not
+enable the timer, and does not start the screen.
 
-### 2. Файл хоста
+### 2. The host file
 
-Его читает `automation/cursor-stand.sh`. Пустая переменная значит дефолт
-скрипта. Агент не заполняет её догадкой.
+`automation/cursor-stand.sh` reads it. An empty variable means the
+script default. The agent does not fill a value by guessing.
 
-Пишет агент после проверки:
+The agent writes these after measuring:
 
-- `CURSOR_STAND_DISPLAY` — `:105`, если `xdpyinfo -display :105` молчит
-  (дисплей свободен). Если занят, спросить другой номер.
-- `CURSOR_STAND_VNC` — `5916`, если порт свободен (`ss`). Иначе спросить.
-- `CURSOR_STAND_X` — пусто (`auto`), если есть NVIDIA, `Xorg` и
-  passwordless sudo. Иначе `xvfb`, и сказать об этом человеку.
+- `CURSOR_STAND_DISPLAY` — `:105` when `xdpyinfo -display :105` is quiet
+  (the display is free). If it is taken, ask for another number.
+- `CURSOR_STAND_VNC` — `5916` when the port is free (`ss`). Otherwise ask.
+- `CURSOR_STAND_X` — empty (`auto`) when NVIDIA, `Xorg`, and passwordless
+  sudo are all present. Otherwise `xvfb`, and say so.
 
-Только ответ человека:
+Only the person answers:
 
-- `CURSOR_STAND_PROXY` — URL или пусто. Порт не выдумывать.
-- `CURSOR_STAND_SOCKS` и дополнение к `CURSOR_STAND_NO_PROXY` — только
-  если прокси уже есть.
-- `ARCHIVE_PROTECTED_IDS` и `ARCHIVE_PROTECTED_NAMES` — какие сессии
-  нельзя архивировать. Пока пусто, `archive` не запускать: список никого
-  не бережёт.
-- нужен ли таймер.
+- `CURSOR_STAND_PROXY` — a URL, or empty. Do not invent a port.
+- `CURSOR_STAND_SOCKS`, and any addition to `CURSOR_STAND_NO_PROXY` —
+  only when a proxy already exists.
+- `ARCHIVE_PROTECTED_IDS` and `ARCHIVE_PROTECTED_NAMES` — sessions
+  `archive` must not touch. While these are empty, do not run `archive`:
+  the list protects nobody.
+- whether a timer is wanted.
 
-Оставить пустым:
+Leave empty:
 
-- `CURSOR_STAND_PROFILE` — будет `~/.local/share/cursor-stand`.
-- `CURSOR_STAND_DISPLAY_SH` — экран из `automation/display/stand-display.sh`.
-- `CURSKILL_XORG_CONF` — конфиг рядом со скриптом, BusID там заглушка.
-- `CURSOR_STAND_WORKSPACE` — папку чата передают флагом `-w`, не дефолтом.
-- `CURSOR_STAND_ORIG_DISPLAY` — `:1`, только замер мыши. Туда не кликать.
+- `CURSOR_STAND_PROFILE` — becomes `~/.local/share/cursor-stand`.
+- `CURSOR_STAND_DISPLAY_SH` — the screen script
+  `automation/display/stand-display.sh`.
+- `CURSKILL_XORG_CONF` — the config next to that script. Its BusID is a placeholder.
+- `CURSOR_STAND_WORKSPACE` — each chat gets a folder with `-w`, not a default.
+- `CURSOR_STAND_ORIG_DISPLAY` — `:1`, mouse measurement only. Do not click there.
 
-В файл не писать пароли, логин Cursor и ключи воркера.
+Do not write passwords, a Cursor login, or worker keys into the file.
 
-`CURSKILL_SETUP_DONE=1` ставят последним, когда пакеты на месте и человек
-ответил про прокси, монитор и таймер.
+Set `CURSKILL_SETUP_DONE=1` last, when the packages are present and the
+person has answered about the proxy, the monitor, and the timer.
 
-### 3. Корень и таймер
+### 3. Root and the timer
 
-Этого нет в apt. Копировать после отдельного согласия.
+These are not apt packages. Copy them after a separate yes.
 
 - `automation/cursor-proxy` → `/usr/local/bin/cursor-proxy`.
-  Без него `up` не стартует Cursor. Это не повод подставлять чужой прокси.
+  Without it `up` does not start Cursor. That is not a reason to invent a proxy.
 - `automation/curskill-xorg` → `/usr/local/sbin/curskill-xorg`,
-  только для экрана на NVIDIA. Строку sudoers человек вставляет сам.
-  Обёртка пускает только `:105`, другой номер — одна строка `:N` в
+  only for an NVIDIA screen. The person adds the sudoers line.
+  The wrapper allows only `:105`. Another number is one line `:N` in
   `/etc/cursor-stand/display`.
-- `automation/systemd/cursor-stand.service` и `cursor-stand.timer` —
-  в `~/.config/systemd/user/`. В `ExecStart` вместо `/ABS/CLONE` пишется
-  каталог клона. `enable` таймера — только если человек просил, чтобы
-  стенд поднимался сам. Пока у монитора этой видеокарты кто-то есть,
-  `up` не делать: второй Xorg может моргнуть стол.
+- `automation/systemd/cursor-stand.service` and `cursor-stand.timer` go
+  to `~/.config/systemd/user/`. In `ExecStart`, replace `/ABS/CLONE` with
+  the clone directory. Enable the timer only if the person asked for the
+  stand to come up by itself. While someone is at the monitor of this GPU,
+  do not `up`: a second Xorg can blink that desktop.
 
-## Проверка
+## Check
 
 ```bash
 skill/scripts/setup.sh
 skill/scripts/doctor.sh
 ```
 
-`setup.sh` ничего не меняет. `doctor.sh` до `CURSKILL_SETUP_DONE=1`
-не кликает. После единицы на свободном живом стенде он кликает
-`handoff --dry-run`: без Return и без текста.
+`setup.sh` changes nothing. Until `CURSKILL_SETUP_DONE=1`, `doctor.sh`
+does not click. After that, on a free living stand, it clicks
+`handoff --dry-run`: no Return and no text.
 
-## Проверка с нуля
+## Check from scratch
 
-На машине, где скилл уже стоит, путь установки смотрит контейнер.
-Команда из корня клона:
+On a machine where the skill is already installed, a container walks the
+install path. From the clone root:
 
 ```bash
 docker/test-fresh-install.sh
 ```
 
-Она собирает локальный образ `curskill-install:bookworm` (пакеты из
-этого файла, без Cursor и без `cursor-proxy`) и гоняет копию репозитория
-внутри контейнера. Файл хоста на хост не возвращается, экран не
-поднимается.
+It builds a local image `curskill-install:bookworm` (the packages from
+this file, without Cursor and without `cursor-proxy`) and runs a copy of
+the repository inside the container. The host file is not copied back,
+and the screen is not started.
 
-Два шага:
+Two steps:
 
-1. Пустой Debian. `setup.sh` кончается отказом и пишет, какой команды нет.
-2. Образ с пакетами. `setup.sh` проходит, `install.sh` вешает симлинки и
-   копирует пустой файл хоста. `doctor` не кликает ни до
-   `CURSKILL_SETUP_DONE=1`, ни после, пока экран не жив.
+1. Empty Debian. `setup.sh` fails and names the missing command.
+2. The image with packages. `setup.sh` passes, `install.sh` creates the
+   symlinks and copies an empty host file. `doctor` does not click before
+   `CURSKILL_SETUP_DONE=1`, and does not click after it while the screen
+   is down.
 
-Образ никуда не публикуется. Вход в Cursor, таймер и Xorg на видеокарте
-эта проверка не изображает.
+The image is not published. A Cursor login, the timer, and Xorg on a GPU
+are outside this check.
