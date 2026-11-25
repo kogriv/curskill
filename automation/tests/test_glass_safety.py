@@ -10,11 +10,13 @@ from automation.glass_agents import (
     _ocr_name_match,
     agent_on_host,
     classify,
+    find_anchor,
     handoff_failure,
     mcp_source_toggle,
     merge_mcp_json,
     pick_handoff_agent,
     server_name_from_id,
+    turn_still_planning,
 )
 
 
@@ -133,6 +135,54 @@ class ToggleTests(unittest.TestCase):
                     im.putpixel((x, y), (240, 240, 240))
             im.save(shot)
             self.assertIsNone(mcp_source_toggle(shot))
+
+
+def _w(x, y, w, h, text):
+    return (x, y, w, h, 90.0, text)
+
+
+class FolderChipTests(unittest.TestCase):
+    def _inherited(self):
+        # handoff-fail-155702: имя папки вместо ветки main.
+        return [
+            _w(800, 482, 137, 13, "curskill-cycle-20261125"),
+            _w(984, 473, 24, 29, "This"),
+            _w(1017, 473, 55, 29, "Computer"),
+        ]
+
+    def test_folder_name_left_of_this_computer(self):
+        self.assertEqual(find_anchor(self._inherited(), "folder-chip"), (868, 488))
+
+    def test_main_keeps_the_old_click(self):
+        words = self._inherited() + [_w(900, 480, 30, 12, "main")]
+        # центр main (915, 486) + (-55, 3)
+        self.assertEqual(find_anchor(words, "folder-chip"), (860, 489))
+
+    def test_footer_this_computer_is_not_the_chip(self):
+        words = [
+            _w(606, 1045, 24, 29, "This"),
+            _w(640, 1045, 55, 29, "Computer"),
+            _w(800, 1045, 80, 13, "curskill-cycle-20261125"),
+        ]
+        self.assertIsNone(find_anchor(words, "folder-chip"))
+
+    def test_result_row_is_below_the_name(self):
+        self.assertEqual(find_anchor(self._inherited(), "folder-result"), (840, 556))
+
+
+class PlanningTests(unittest.TestCase):
+    def test_planning_next_moves(self):
+        words = [
+            _w(592, 138, 60, 15, "Planning"),
+            _w(659, 139, 28, 10, "next"),
+            _w(693, 141, 44, 8, "moves"),
+            _w(658, 1014, 65, 15, "follow-up"),
+            _w(606, 1045, 24, 29, "This"),
+        ]
+        self.assertTrue(turn_still_planning(words))
+
+    def test_planning_without_next_is_not_the_status(self):
+        self.assertFalse(turn_still_planning([_w(592, 138, 60, 15, "Planning")]))
 
 
 if __name__ == "__main__":

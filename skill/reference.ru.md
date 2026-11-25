@@ -134,6 +134,10 @@ GitHub-remote стала `local-rc` на 8-й секунде. Судить по 
 composer-send (и тем самым в doctor dry-run). Снимки замера:
 `var/shots/handoff-fail-convert-211747.png`, `20261013T2225*.png`.
 
+Первый ход не закончен, пока на снимке «Planning next moves», даже если
+футер и поле follow-up уже есть (25.11.2026,
+`move-working-cancel-155123.png`). Handoff продолжает ждать.
+
 ## Якоря UI (glass 1920×1080 @ 0,0, пакет 3.23.23)
 
 Таблица в `glass_agents.py` (`ANCHORS`). `anchor SHOT имя` → `x y` или код 1.
@@ -142,7 +146,7 @@ composer-send (и тем самым в doctor dry-run). Снимки замер�
 | имя | токены | зона (x0,y0,x1,y1) |
 |---|---|---|
 | `new-chat` | New, Chat | 0,0,260,130 |
-| `folder-chip` | main (клик левее) | 700,450,1100,520 |
+| `folder-chip` | main (клик левее). Если main нет — имя папки слева от This Computer в чипе нового чата | 700,450,1100,520 |
 | `folder-search` | repos | 740,490,1100,545 |
 | `folder-result` | main + смещение | только если нет Recents |
 | `env-this-computer` | This, Computer | 880,450,1200,530 |

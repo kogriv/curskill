@@ -144,6 +144,10 @@ composer-send (and therefore in the doctor dry-run). Measurement shots
 live under the profile, not in the repository:
 `var/shots/handoff-fail-convert-211747.png`, `20261013T2225*.png`.
 
+The first turn is not finished while the shot shows "Planning next
+moves", even if the footer and the follow-up field are already there
+(2026-11-25, `move-working-cancel-155123.png`). Handoff keeps waiting.
+
 ## UI anchors (glass 1920×1080 at 0,0, package 3.23.23)
 
 The table is in `glass_agents.py` (`ANCHORS`). `anchor SHOT name` prints
@@ -152,7 +156,7 @@ The table is in `glass_agents.py` (`ANCHORS`). `anchor SHOT name` prints
 | name | tokens | zone (x0,y0,x1,y1) |
 |---|---|---|
 | `new-chat` | New, Chat | 0,0,260,130 |
-| `folder-chip` | main (click to the left) | 700,450,1100,520 |
+| `folder-chip` | main (click to the left). If main is absent, the folder name to the left of This Computer in the new-chat chip | 700,450,1100,520 |
 | `folder-search` | repos | 740,490,1100,545 |
 | `folder-result` | main + offset | only when Recents is absent |
 | `env-this-computer` | This, Computer | 880,450,1200,530 |

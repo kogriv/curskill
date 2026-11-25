@@ -315,8 +315,11 @@ that picks Recents/GitHub and becomes an Environment). Do **not** call
 
 **Order (2026-10-13).** (1) A short first message (default READY; a
 positional text longer than 120 characters is a refusal). (2) Wait until
-the turn ends (footer plus follow-up, no Stop). (3) Convert the footer to
-Self-Hosted Worker (`glass_convert_to_rc`, shared with `convert`).
+the turn ends (footer plus follow-up, and not "Planning next moves").
+(3) Convert the footer to Self-Hosted Worker (`glass_convert_to_rc`,
+shared with `convert`). The folder chip is the label left of This
+Computer. The word `main` is only the branch inside that chip. A chip
+that already shows a folder name is still the chip.
 (4) `--then` / `--then-file` is the second message via `composer-send`.
 `-n` renames only a local-rc. `--no-convert` leaves a local chat (a probe
 or a recovery). `--dry-run` does not press Return and does not convert.

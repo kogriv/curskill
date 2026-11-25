@@ -297,8 +297,10 @@ Worker — ловушка нового чата, не RC.
 
 **Порядок (13.10.2026).** (1) Короткое первое сообщение (дефолт READY;
 позиционный текст >120 символов — отказ). (2) Ждать конец хода (футер +
-follow-up, нет Stop). (3) Конвертация футера → Self-Hosted Worker
-(`glass_convert_to_rc`, общий с `convert`). (4) `--then` / `--then-file` —
+follow-up, и на экране нет «Planning next moves»). (3) Конвертация
+футера → Self-Hosted Worker (`glass_convert_to_rc`, общий с `convert`).
+Чип папки — подпись слева от This Computer. Слово `main` только ветка
+внутри чипа. Чип, на котором уже имя папки, всё равно этот чип. (4) `--then` / `--then-file` —
 второе сообщение через `composer-send`. `-n` — Rename только у local-rc.
 `--no-convert` — оставить локальный чат (проба / recover). `--dry-run` не
 жмёт Return и не конвертирует.

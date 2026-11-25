@@ -1502,6 +1502,11 @@ cmd_handoff() {
     # у follow-up (fallback Environment) — не использовать здесь.
     if python3 "$GLASS_AGENTS" anchor "$shot" footer-this-computer >/dev/null 2>&1 \
       && python3 "$GLASS_AGENTS" anchor "$shot" send-follow-up >/dev/null 2>&1; then
+      if python3 "$GLASS_AGENTS" turn-busy "$shot"; then
+        echo "handoff: футер есть, но на экране Planning next moves — жду"
+        sleep 1
+        continue
+      fi
       replied=1
       echo "handoff: первый ответ готов (футер This Computer, follow-up)"
       break

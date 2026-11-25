@@ -411,6 +411,76 @@ def _in_zone(
     return x0 <= cx <= x1 and y0 <= cy <= y1
 
 
+def _composer_this_computer(
+    words: list[tuple[int, int, int, int, float, str]],
+) -> tuple[int, int, int, int] | None:
+    """«This Computer» чипа нового чата, не футер (тот ниже y=1035)."""
+    this = None
+    comp = None
+    for x, y, w, h, _c, t in words:
+        nt = _norm_tok(t)
+        if not (430 <= y <= 560 and x >= 700):
+            continue
+        if nt == "this":
+            this = (x, y, w, h)
+        elif nt == "computer":
+            comp = (x, y, w, h)
+    if not this or not comp:
+        return None
+    if not (this[0] < comp[0] < this[0] + 180 and abs(this[1] - comp[1]) < 24):
+        return None
+    return this
+
+
+def _folder_name_box(
+    words: list[tuple[int, int, int, int, float, str]],
+) -> tuple[int, int, int, int] | None:
+    """Имя папки слева от чипа This Computer.
+
+    Слово main — ветка внутри чипа. Если папка уже выбрана, OCR читает её
+    имя и main нет (25.11.2026, handoff-fail-155702: curskill-cycle-20261125
+    в 800,482, This Computer в 984,473).
+    """
+    this = _composer_this_computer(words)
+    if not this:
+        return None
+    tx, ty, _tw, th = this
+    best = None
+    for x, y, w, h, _c, t in words:
+        nt = _norm_tok(t)
+        if len(nt) < 3 or w < 36 or x < 500:
+            continue
+        if abs((y + h / 2) - (ty + th / 2)) > 18:
+            continue
+        if x + w > tx - 6:
+            continue
+        if best is None or x > best[0]:
+            best = (x, y, w, h)
+    return best
+
+
+def turn_still_planning(
+    words: list[tuple[int, int, int, int, float, str]],
+) -> bool:
+    """«Planning next moves» — ход не кончился, даже если футер уже виден.
+
+    25.11.2026 move-working-cancel-155123: Planning 592,138 и next 659,139
+    одновременно с follow-up 658,1014 и This 606,1045.
+    """
+    heads = [
+        (x, y)
+        for x, y, _w, _h, _c, t in words
+        if _norm_tok(t) == "planning" and x > 400 and 80 <= y <= 900
+    ]
+    for x, y, _w, _h, _c, t in words:
+        if _norm_tok(t) != "next":
+            continue
+        for px, py in heads:
+            if abs(y - py) < 20 and px < x < px + 200:
+                return True
+    return False
+
+
 def find_anchor(
     words: list[tuple[int, int, int, int, float, str]], name: str
 ) -> tuple[int, int] | None:
@@ -433,7 +503,14 @@ def find_anchor(
         if all(t in found for t in want):
             break
     else:
-        return None
+        box = _folder_name_box(words) if name in ("folder-chip", "folder-result") else None
+        if not box:
+            return None
+        x, y, w, h = box
+        if name == "folder-chip":
+            return x + w // 2, y + h // 2
+        # Первая строка пикера под чипом: тот же сдвиг, что from-token main -28,+68.
+        return x + w // 2 - 28, y + h // 2 + 68
     boxes = [found[t] for t in want]
     x0 = min(b[0] for b in boxes)
     y0 = min(b[1] for b in boxes)
@@ -1626,6 +1703,10 @@ def main(argv: list[str]) -> int:
             return 1
         print(hit[0], hit[1])
         return 0
+    if cmd == "turn-busy":
+        # turn-busy SHOT → 0, если на снимке «Planning next moves».
+        shot = Path(argv[2])
+        return 0 if turn_still_planning(ocr_words(shot)) else 1
     if cmd == "busy":
         # Работающие агенты: RC @ host (status 1) + локальные status 1 +
         # выделенный локальный uuid без записи (до convert — иначе приняли за мусор).
