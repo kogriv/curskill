@@ -627,19 +627,33 @@ def archive_menu_click(
     return x + w // 2, y + h // 2
 
 
+def _row_token_hits(part: str, tokens: list[str]) -> bool:
+    """Слово имени есть в строке. OCR режет хвост: instruction → instruc."""
+    for tok in tokens:
+        if len(tok) < 4:
+            continue
+        if part == tok:
+            return True
+        if part.startswith(tok) and len(tok) * 2 >= len(part):
+            return True
+        if tok.startswith(part) and len(part) * 2 >= len(tok):
+            return True
+    return False
+
+
 def sidebar_row_matches(
     words: list[tuple[int, int, int, int, float, str]], y: int, name: str
 ) -> bool:
     """Имя сессии есть в словах строки сайдбара на этой Y. x>280 — не сайдбар."""
-    parts = [p for p in _norm_tok(name).split() if p]
+    parts = [p for p in _norm_tok(name).split() if len(p) >= 4]
     if not parts:
         return False
-    blob = " ".join(
+    tokens = [
         _norm_tok(t)
         for x, yy, w, h, _c, t in words
         if x <= 280 and abs((yy + h / 2) - y) <= 18 and _norm_tok(t)
-    )
-    return all(part in blob for part in parts)
+    ]
+    return all(_row_token_hits(part, tokens) for part in parts)
 
 
 def ocr_image(path: Path) -> str:

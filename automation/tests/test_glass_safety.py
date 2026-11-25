@@ -248,6 +248,20 @@ class SidebarRowTests(unittest.TestCase):
         words = [_w(40, 330, 70, 14, "full-cycle")]
         self.assertTrue(sidebar_row_matches(words, 337, "full-cycle"))
 
+    def test_truncated_last_word_matches(self):
+        # Снимок rename 26.11.2026: instruction прочитано как instruc.
+        words = [
+            _w(41, 207, 36, 13, "Ready"),
+            _w(81, 210, 54, 10, "response"),
+            _w(140, 207, 40, 10, "instruc"),
+            _w(195, 207, 13, 11, "2"),
+        ]
+        self.assertTrue(sidebar_row_matches(words, 211, "Ready response instruction"))
+
+    def test_one_word_is_not_the_whole_name(self):
+        words = [_w(41, 207, 36, 13, "Ready")]
+        self.assertFalse(sidebar_row_matches(words, 211, "Ready response instruction"))
+
     def test_other_row_does_not_match(self):
         words = [_w(40, 200, 70, 14, "cur-mql")]
         self.assertFalse(sidebar_row_matches(words, 337, "full-cycle"))
