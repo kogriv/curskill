@@ -1,5 +1,8 @@
 # Хосты
 
+Первая машина: [SETUP.md](../SETUP.md) и `scripts/setup.sh`.
+Пока `CURSKILL_SETUP_DONE` не равен `1`, `doctor` по glass не кликает.
+
 Один стенд на машину. Порты, профиль, экран и список сессий, которые
 `archive` не трогает, живут в `config/hosts/$(hostname).env`.
 Пустой образец — `config/hosts/example.env.example`. Сам `.env` в gitignore.

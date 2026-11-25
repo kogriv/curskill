@@ -23,11 +23,16 @@ Cloud Agents — **другие** сессии. Клики по столу вл�
 
 Это оркестратор сессий Cursor Agents Window на Linux и X11. Не Windows, не macOS, не Wayland.
 
-**Перед любой работой на стенде** (Claude Code и новый чат Cursor): перечитай
-этот `SKILL.md` **с диска** (копия в контексте сессии устаревает) и запусти
-`scripts/doctor.sh`. На свободном стенде doctor кликает `handoff --dry-run`
-(без Return и без текста). Занятый стенд он не кликает. Детали экрана — [display.md](display.md), хостов —
-[hosts.md](hosts.md), отказов — [reference.md](reference.md).
+**Новая машина.** Сначала [SETUP.md](../SETUP.md): требования, файл хоста,
+согласие человека. `scripts/setup.sh` только проверяет команды и ничего не
+ставит. Пока в файле хоста нет `CURSKILL_SETUP_DONE=1`, `doctor` по glass
+не кликает. `up` и таймер — после фразы человека «поднимай».
+
+**Перед любой работой на уже настроенном стенде** перечитай этот `SKILL.md`
+с диска и запусти `scripts/doctor.sh`. На свободном живом стенде при
+`CURSKILL_SETUP_DONE=1` doctor кликает `handoff --dry-run` (без Return и
+без текста). Занятый стенд он не кликает. Экран — [display.md](display.md),
+хосты — [hosts.md](hosts.md), отказы — [reference.md](reference.md).
 
 ## Кто читает этот скилл
 
@@ -446,7 +451,8 @@ GPU туда, не в этот скилл. См. [hosts.md](hosts.md).
 | `CURSOR_STAND_ORIG_DISPLAY` | стол, замер мыши | `:1` |
 | `CURSOR_STAND_DISPLAY_SH` | экран | `automation/display/stand-display.sh` |
 | `CURSOR_STAND_BIN` | бинарь | `/usr/local/bin/cursor-proxy` |
-| `CURSOR_STAND_PROXY` | HTTP proxy Cursor | пусто (без прокси); ферма — `config/hosts/<host>.env` |
+| `CURSOR_STAND_PROXY` | HTTP proxy Cursor | пусто (без прокси); URL только из ответа человека в `config/hosts/<host>.env` |
+| `CURSKILL_SETUP_DONE` | doctor может кликать dry-run | пусто, пока человек не ответил. `1` закрывает настройку |
 | `CURSOR_STAND_CONFIG` | файл профиля машины | `config/hosts/$(hostname).env`, если есть |
 | `CURSOR_STAND_X` | `auto` \| `xorg` \| `xvfb` | `auto` |
 | `CURSOR_STAND_WAIT_WORKER_SEC` | таймаут wait-worker | `120` |

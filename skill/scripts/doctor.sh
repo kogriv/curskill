@@ -199,7 +199,10 @@ if [ -n "$checked" ] && [ -n "$VER" ] && [ "$checked" != "$VER" ]; then
 fi
 
 handoff_line=""
-if [ -n "${GLASS:-}" ] && python3 "$GLASS" busy "$(hostname)" >/dev/null 2>&1; then
+if [ "${CURSKILL_SETUP_DONE:-}" != "1" ]; then
+  warn "CURSKILL_SETUP_DONE не 1 — dry-run не гонял. Сначала SETUP.md и skill/scripts/setup.sh"
+  handoff_line="handoff: настройка не закрыта"
+elif [ -n "${GLASS:-}" ] && python3 "$GLASS" busy "$(hostname)" >/dev/null 2>&1; then
   if [ -n "$checked" ] && [ "$checked" = "$VER" ]; then
     handoff_line="handoff: якоря найдены"
     ok "стенд занят — dry-run не гонял, ui-checked=$checked"
@@ -229,5 +232,9 @@ if [ "$fail" -ne 0 ]; then
   exit 1
 fi
 echo "$handoff_line"
-echo "doctor: можно status / handoff"
+if [ "${CURSKILL_SETUP_DONE:-}" != "1" ]; then
+  echo "doctor: можно status. handoff — после CURSKILL_SETUP_DONE=1"
+else
+  echo "doctor: можно status / handoff"
+fi
 exit 0
