@@ -2,6 +2,19 @@
 
 Russian: [README.ru.md](README.ru.md). English is the copy to follow.
 
+## Docs
+
+| | English | Russian |
+|---|---|---|
+| Diagrams: two displays, the GPU switch, handoff | [How it is put together](skill/SKILL.md#layout) | [Как это устроено](skill/SKILL.ru.md#layout) |
+| GPU, and why you can skip it | [What draws the window](skill/display.md#gpu) | [Чем рисовать](skill/display.ru.md#gpu) |
+| Why a second X server | [display.md](skill/display.md) | [display.ru.md](skill/display.ru.md) |
+| Install, packages, host file | [SETUP.md](SETUP.md) | [SETUP.ru.md](SETUP.ru.md) |
+| Commands the agent runs | [SKILL.md](skill/SKILL.md) | [SKILL.ru.md](skill/SKILL.ru.md) |
+| Failures, anchors, sqlite | [reference.md](skill/reference.md) | [reference.ru.md](skill/reference.ru.md) |
+| One stand per machine | [hosts.md](skill/hosts.md) | [hosts.ru.md](skill/hosts.ru.md) |
+| Script index | [automation/README.md](automation/README.md) | [automation/README.ru.md](automation/README.ru.md) |
+
 A separate X11 display for Cursor Agents Window and Remote Control.
 Its own `DISPLAY`, its own profile. It does not touch the mouse on the
 owner's desktop.
@@ -46,7 +59,9 @@ Xvfb paints it on the CPU and is a complete stand: same clicks, same
 check, no root. NVIDIA Xorg paints the same window on the card, so a
 stand that stays up does not spend that CPU. Skip the GPU when there is
 no NVIDIA, when sudo cannot start Xorg, or when a person is at that
-monitor. AMD and Intel are not implemented.
+monitor. AMD and Intel are not implemented. The diagrams are in
+[How it is put together](skill/SKILL.md#layout). The renderer switch is
+in [What draws the window](skill/display.md#gpu).
 
 ## Where it runs
 

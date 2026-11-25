@@ -45,6 +45,8 @@ machine has no `:1` mouse). A move while `unavailable` is not checked.
 A move while the mouse is alive means isolation is broken, unless the
 owner at the desk moved it.
 
+<a id="gpu"></a>
+
 ## What draws it: GPU Xorg or Xvfb
 
 The GPU is optional. Both paths paint one Cursor Agents window at

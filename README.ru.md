@@ -2,6 +2,19 @@
 
 Английский — источник правды: [README.md](README.md).
 
+## Документы
+
+| | По-русски | English |
+|---|---|---|
+| Схемы: два экрана, переключатель GPU, handoff | [Как это устроено](skill/SKILL.ru.md#layout) | [How it is put together](skill/SKILL.md#layout) |
+| Видеокарта и почему её можно не брать | [Чем рисовать](skill/display.ru.md#gpu) | [What draws the window](skill/display.md#gpu) |
+| Зачем второй X-сервер | [display.ru.md](skill/display.ru.md) | [display.md](skill/display.md) |
+| Установка, пакеты, файл хоста | [SETUP.ru.md](SETUP.ru.md) | [SETUP.md](SETUP.md) |
+| Команды, которые выполняет агент | [SKILL.ru.md](skill/SKILL.ru.md) | [SKILL.md](skill/SKILL.md) |
+| Отказы, якоря, sqlite | [reference.ru.md](skill/reference.ru.md) | [reference.md](skill/reference.md) |
+| Один стенд на машину | [hosts.ru.md](skill/hosts.ru.md) | [hosts.md](skill/hosts.md) |
+| Указатель скриптов | [automation/README.ru.md](automation/README.ru.md) | [automation/README.md](automation/README.md) |
+
 Отдельный X11-экран для Cursor Agents Window и Remote Control: свой
 `DISPLAY`, свой профиль, мышь стола владельца не трогает.
 
@@ -21,7 +34,7 @@ API «открой новую вкладку Agents Window и включи Remot
 
 Один компьютер — один стенд. Новый агент — новая вкладка, не новый X-сервер. Второй Xorg на видеокарте, за монитором которой кто-то сидит, может моргнуть стол, поэтому стенд не поднимают, пока человек сам не скажет.
 
-Видеокарта необязательна. Стенду нужно где-то нарисовать окно Cursor. Xvfb рисует его процессором и этого достаточно: те же клики, та же проверка, root не нужен. NVIDIA Xorg рисует то же окно на карте, и постоянно включённый стенд не тратит на это процессор. Карту не трогают, если NVIDIA нет, если Xorg нельзя запустить без пароля, или если у этого монитора кто-то сидит. AMD и Intel не сделаны.
+Видеокарта необязательна. Стенду нужно где-то нарисовать окно Cursor. Xvfb рисует его процессором и этого достаточно: те же клики, та же проверка, root не нужен. NVIDIA Xorg рисует то же окно на карте, и постоянно включённый стенд не тратит на это процессор. Карту не трогают, если NVIDIA нет, если Xorg нельзя запустить без пароля, или если у этого монитора кто-то сидит. AMD и Intel не сделаны. Схемы — [Как это устроено](skill/SKILL.ru.md#layout). Переключатель рендера — [Чем рисовать](skill/display.ru.md#gpu).
 
 Скилл называется `curskill`. Команда стенда — `automation/cursor-stand.sh`.
 Профиль по умолчанию — `~/.local/share/cursor-stand`.

@@ -33,6 +33,8 @@ screenshot.
 This is the orchestrator for Cursor Agents Window sessions on Linux and
 X11. Not Windows, not macOS, not Wayland.
 
+<a id="layout"></a>
+
 ## How it is put together
 
 The owner's desktop and the stand do not share a mouse.
@@ -205,7 +207,7 @@ not an interview in chat. Before the first `up` on a host:
 | `xvfb` | software rendering immediately |
 
 The GPU is optional. Why it is worth having, and when to skip it, is in
-[How it is put together](#how-it-is-put-together). This table is only the
+[How it is put together](#layout). This table is only the
 switch. NVIDIA only. AMD, Intel, and Wayland are not implemented.
 
 Do not raise a second Xorg on the same card while a person is at the
