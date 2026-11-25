@@ -127,6 +127,27 @@ These are not apt packages. Copy them after a separate yes.
   stand to come up by itself. While someone is at the monitor of this GPU,
   do not `up`: a second Xorg can blink that desktop.
 
+## Updating an existing clone
+
+From the clone root:
+
+```bash
+./install/update.sh
+```
+
+This pulls fast-forward only and refreshes the skill symlinks. It does not
+start the screen, does not edit the host file, and does not change the
+systemd unit. A dirty clone refuses the pull.
+
+The host file `config/hosts/$(hostname).env` stays on the machine. Pull
+does not replace it. That is how this same repository is used on the
+machine that publishes it: the code comes from the clone, the machine's
+own ports stay out of git.
+
+Point the timer at this clone once, in `ExecStart`, when this clone should
+be the one that runs `ensure`. Later updates do not need that edit again:
+`git pull` changes the files the unit already calls.
+
 ## Check
 
 ```bash
