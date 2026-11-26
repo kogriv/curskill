@@ -2109,6 +2109,8 @@ cmd_archive() {
 
 # discard --id <uuid>: локальный черновик без строки cloudAgentRepository.
 # Запись в базе — не эта команда. Stop на экране — отказ до клика.
+# Меню без слова Discard, но со словом Archive — это тот же черновик после ответа.
+# Archive All Below не кликается. Нет ни того ни другого слова — Escape и отказ.
 cmd_discard() {
   [ "${1:-}" = "--id" ] && [ -n "${2:-}" ] || { echo "discard: нужен --id uuid черновика" >&2; exit 1; }
   adopt_if_live || load_state || { echo "стенд не поднят — сначала up" >&2; exit 1; }
@@ -2147,14 +2149,28 @@ cmd_discard() {
   sleep 0.15
   DISPLAY="$DISP" xdotool click --clearmodifiers 3
   sleep 0.5
+  sel=$(python3 "$GLASS_AGENTS" selected | head -1)
+  if [ "$sel" != "$id" ] && [ "$sel" != "bc-$id" ] && [ "${sel#bc-}" != "$id" ]; then
+    DISPLAY="$DISP" xdotool key --clearmodifiers Escape
+    echo "discard: правый клик открыл другую вкладку '$sel', ждали $id — пункт меню не жму" >&2
+    exit 1
+  fi
   shot="$VAR/shots/_discard-menu.png"
   DISPLAY="$DISP" import -window root "$shot" 2>/dev/null || DISPLAY="$DISP" scrot -o "$shot"
-  local pos ax ay
-  pos=$(python3 "$GLASS_AGENTS" discard-pos "$shot") || {
+  local pos ax ay via=""
+  # Черновик, которому уже ответили, в меню пишет Archive, не Discard
+  # (26.11.2026 10:39 +07, чат без строки cloudAgentRepository).
+  # Archive All Below archive-pos не возвращает. Соседнюю точку не жмём.
+  if pos=$(python3 "$GLASS_AGENTS" discard-pos "$shot" 2>/dev/null); then
+    via="Discard"
+  elif pos=$(python3 "$GLASS_AGENTS" archive-pos "$shot" 2>/dev/null); then
+    via="Archive"
+  else
     DISPLAY="$DISP" xdotool key --clearmodifiers Escape
-    echo "discard: в меню нет пункта Discard. Снимок $shot" >&2
+    echo "discard: в меню нет пункта Discard и нет пункта Archive. Снимок $shot" >&2
     exit 1
-  }
+  fi
+  echo "discard: пункт меню $via"
   ax=$(printf '%s\n' "$pos" | awk '{print $1}')
   ay=$(printf '%s\n' "$pos" | awk '{print $2}')
   DISPLAY="$DISP" xdotool mousemove --sync "$ax" "$ay" click --clearmodifiers 1
