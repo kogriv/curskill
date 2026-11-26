@@ -211,7 +211,7 @@ else
   warn "не прочитал версию пакета Cursor"
 fi
 anchor_rc=0
-anchor_out=$(doctor_anchor_lines "$VER" "$checked" "${CURSOR_STAND_UI_CALIBRATED:-}") || anchor_rc=$?
+anchor_out=$(doctor_anchor_lines "$VER" "$checked" "$(cursor_stand_ui_calibrated)") || anchor_rc=$?
 if [ -n "$anchor_out" ]; then
   while IFS= read -r anchor_line; do
     case "$anchor_line" in
