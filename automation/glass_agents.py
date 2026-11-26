@@ -1148,11 +1148,14 @@ def mcp_done_pos(shot: Path) -> tuple[int, int] | None:
     hit = find_anchor(ocr_words(shot), "mcp-done")
     if hit:
         return hit
-    # Рядом с Reload (OCR стабилен), Done — синяя кнопка правее.
+    # Рядом с Reload (OCR стабилен). Done бывает синей или чёрной
+    # (26.11.2026 mcp-cfg-105019: чёрная кнопка x 1089–1142).
     reload_y = None
+    reload_x = 900
     for x, y, w, h, _c, t in ocr_words(shot):
         if _norm_tok(t) == "reload" and 700 <= x <= 950:
             reload_y = y + h // 2
+            reload_x = x + w
             break
     if Image is None:
         return None
@@ -1167,11 +1170,24 @@ def mcp_done_pos(shot: Path) -> tuple[int, int] | None:
             r, g, b = px[x, y]
             if b > r + 40 and b > 150 and g > 100:
                 blues.append((x, y))
-    if len(blues) < 40:
+    if len(blues) >= 40:
+        xs = [p[0] for p in blues]
+        ys = [p[1] for p in blues]
+        return sum(xs) // len(xs), sum(ys) // len(ys)
+    darks: list[tuple[int, int]] = []
+    x_from = max(1000, reload_x + 40)
+    for y in range(y0, y1):
+        for x in range(x_from, min(1250, w)):
+            r, g, b = px[x, y]
+            if r < 60 and g < 60 and b < 60:
+                darks.append((x, y))
+    if len(darks) < 40:
         return None
-    xs = [p[0] for p in blues]
-    ys = [p[1] for p in blues]
-    return sum(xs) // len(xs), sum(ys) // len(ys)
+    xs = [p[0] for p in darks]
+    ys = [p[1] for p in darks]
+    if max(xs) - min(xs) > 90 or max(ys) - min(ys) > 40:
+        return None
+    return (min(xs) + max(xs)) // 2, (min(ys) + max(ys)) // 2
 
 
 def _atomic_write(path: Path, text: str, mode: int) -> None:

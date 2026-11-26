@@ -21,6 +21,7 @@ from automation.glass_agents import (
     find_anchor,
     handoff_failure,
     load_agents,
+    mcp_done_pos,
     mcp_list_from_shot,
     mcp_source_toggle,
     merge_mcp_json,
@@ -423,6 +424,21 @@ class McpPanelTests(unittest.TestCase):
             with patch("automation.glass_agents.ocr_words", return_value=words):
                 hit = mcp_source_toggle(shot)
         self.assertEqual(hit, ("off", 1114, 515))
+
+    def test_black_done_button_beside_reload(self):
+        from PIL import Image
+
+        im = Image.new("RGB", (1920, 1080), (246, 246, 246))
+        for y in range(667, 695):
+            for x in range(1089, 1143):
+                im.putpixel((x, y), (20, 20, 20))
+        words = [(805, 676, 40, 10, 90.0, "Reload")]
+        with tempfile.TemporaryDirectory() as d:
+            shot = Path(d) / "cfg.png"
+            im.save(shot)
+            with patch("automation.glass_agents.ocr_words", return_value=words):
+                hit = mcp_done_pos(shot)
+        self.assertEqual(hit, (1115, 680))
 
 
 class SettingsReportTests(unittest.TestCase):
