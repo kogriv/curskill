@@ -329,3 +329,36 @@ first. VNC stays on localhost. The password file is `$PROFILE/var/vnc.pass`,
 mode `0600`, created when `up` starts x11vnc. The password is not printed
 and not stored in git. An x11vnc that is already listening is left until
 the port is free.
+
+## Screenshot gates and the database
+
+A click still needs the picture. A fact that is already in the stand
+profile database is not refused because OCR cut a word. The inventory,
+written for BL-070:
+
+| gate | what the picture is for | fact already in the database |
+|---|---|---|
+| sidebar row before rename | the highlighted row is the session whose name is about to change | selected id equals the bc-id; the current name is `resolve` |
+| sidebar row before archive | the highlighted row is the session about to be archived | selected id; name; `status` (a running turn is refused before the click) |
+| Search Agents palette | the open palette shows this session before Return | the bc-id that was pasted; confirmation still needs the picture because the palette is not a database row |
+| folder chip left of This Computer | which chip to click | no. The database does not say where the chip is drawn |
+| Planning next moves | the turn has not finished, so convert waits | no. `status` can already be 1 while the words are still on screen; the words are the wait |
+| composer-send field | where to click the input | the target bc-id and its folder. The field coordinates are only on the picture |
+| MCP source toggle | whether that server's switch is on | `mcp.json` has the server definition. The on/off switch of the open Agents window is on the picture |
+| Settings → Agents | the toggle and choice values | no database field is read for these. The command prints the picture and does not click |
+
+`f33f2fd` already accepts a truncated sidebar token when at least half of the name word remains. Replacing the other gates is not part of this inventory.
+
+## Doctor fields
+
+Every `scripts/doctor.sh` run prints: host and user; the resolved script and its required commands; the display script and `CURSOR_STAND_X`; the binaries; whether a Cursor Agents window exists on the stand display (search only, the window is not moved); profile login as `да` or `нет` with no address; anchor lines from `doctor_anchor_lines` (package version, `ui-checked`, `CURSOR_STAND_UI_CALIBRATED`); whether the stand is busy; the proxy as a port number or "not set", never the URL; the count of workers started from the stand profile, with no command line; the owner's mouse as a location or `unavailable`.
+
+Exit 0 means a click is allowed. Exit is not 0 when the last handoff line contains `ЗАБЛОКИРОВАН` or a required part is missing. A busy stand does not get `handoff --dry-run`. A mismatch between the calibrated major.minor and the package is a warning line, not a coordinate to type in chat.
+
+## where to look
+
+A successful handoff prints one block: bc-id, `https://cursor.com/agents/<bc-id>`, class `local-rc`, folder, worker, the requested name when there was one, the stand display, `vnc localhost` and `CURSOR_STAND_VNC`, the owner's mouse before and after, and that other tabs were not renamed. The VNC password, the proxy URL, and the login address are not in that block. x11vnc stays on localhost.
+
+`scripts/glass.sh inventory` lists non-archived rows: id, name, folder, class (`local-rc`, `environment`, `private-incomplete`, `other`), working, worker. A selected uuid with no `cloudAgentRepository` row is `local-draft`. `discard --id` is only for that draft. A row that `resolve` can see is archive or convert, not Discard. Discard refuses when the word Stop is on the screen, when the id or name is protected, and when the Discard item is not in the sidebar menu. It does not click a neighbour and it does not use Archive All Below.
+
+`mcp ready NAME --id` checks the open `local-rc` tab. The server must be in that folder's `mcp.json` or in the user `mcp.json`, and the MCPs panel must not say disabled. The tab then gets one composer message. Settings → Agents toggles are not clicked.

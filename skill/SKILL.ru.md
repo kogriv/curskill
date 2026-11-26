@@ -152,6 +152,9 @@ scripts/wait-worker.sh /ABS/PROJECT
 scripts/stand.sh composer-send --id bc-…     # resend; поле ввода — по снимку
 scripts/stand.sh rename --id bc-… имя
 scripts/stand.sh archive --id bc-…           # пробные/ошибочные; не выполняющуюся
+scripts/stand.sh discard --id <uuid>         # черновик без строки в базе
+scripts/glass.sh inventory                   # вкладки профиля, включая local-draft
+scripts/stand.sh mcp ready NAME --id bc-…    # сервер виден этой вкладке local-rc
 scripts/stand.sh mcp list                    # Customize → MCPs
 scripts/stand.sh mcp find NAME
 scripts/stand.sh mcp enable NAME             # тоггл источника ON
@@ -535,8 +538,42 @@ GPU туда, не в этот скилл. См. [hosts.ru.md](hosts.ru.md).
 
 Runtime, снимки, `state.env`, `hold` — `$PROFILE/var`, вне git.
 
+## Чего этот скилл на себя не берёт
+
+Порядок развития и причины — в
+[skill/docs/roadmap/README.md](docs/roadmap/README.md). Открытая работа —
+BL-067…BL-078. BL-067 — замер. Пока он не записан, новые клики по чипу
+папки и по чипу «Run on» не добавлять. Из этого файла задачи не
+начинать. Начинать одну только когда человек попросил именно её.
+
+Скилл на себя не берёт:
+
+- Обёртку над терминальным агентом: `agent -p` / `--print`, `agent persist`
+  (`list`, `attach`, `stop`), `agent ls`, `agent resume`, `--continue`,
+  `--resume`, флаги worktree (`-w`, `--worktree-base`,
+  `--skip-worktree-setup`), `--sandbox`, `--model`, `agent models`,
+  `--list-models`, режим plan/ask, `agent generate-rule`, `agent plugin`.
+- Запуск `agent worker` и ведение пула: `--pool`, `--worker-dir` как замена
+  handoff, `--label`, `--labels-file`, `--management-addr`,
+  `--idle-release-timeout`, `--mint-github-token`, `--clone-git-repos`,
+  `--sync-dashboard-secrets`, `--on-session-start`, `--on-session-end`,
+  `--identity-socket`.
+- Второй список MCP для CLI. `agent mcp login`, `list`, `list-tools`,
+  `enable` и `disable` остаются командами CLI. Доведение сервера до вкладки
+  профиля стенда — BL-076.
+- Создание Cloud Agent и подмену им вкладки стенда. `agent create-chat`
+  по-прежнему не замена handoff.
+- Открытие файлов и сравнение. Флаги десктопного `cursor` `--goto`,
+  `--diff`, `--merge`, `--add`, `--remove`, `--wait` остаются у `cursor`.
+  `--glass` по-прежнему только открывает окно и сессию не создаёт.
+- Второй редактор Settings → Agents и клики по тумблерам этой страницы.
+  Чтение страницы — `settings agents`, BL-077.
+- Отдельный продукт удалённого стола. Просмотр экрана стенда — x11vnc на
+  localhost. Куда смотреть, печатает ответ handoff, BL-078.
+
 ## Лабораторные доки (не копипастить в ответ пользователю)
 
 - экран — [display.ru.md](display.ru.md)
 - хосты — [hosts.ru.md](hosts.ru.md)
 - отказы, координаты, sqlite — [reference.ru.md](reference.ru.md)
+- роадмап и открытые задачи — [docs/roadmap/README.md](docs/roadmap/README.md)

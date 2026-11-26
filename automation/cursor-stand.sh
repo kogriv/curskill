@@ -25,6 +25,8 @@
 #   cursor-stand.sh rename --current pong
 #   cursor-stand.sh focus --id bc-…   # открыть вкладку сессии
 #   cursor-stand.sh archive --id bc-… # сайдбар → Archive (не выполняющуюся)
+#   cursor-stand.sh discard --id <uuid> # черновик без строки в базе → Discard
+#   glass_agents.py inventory            # вкладки профиля, включая local-draft
 #   cursor-stand.sh mcp list                     # Customize → MCPs, список серверов
 #   cursor-stand.sh mcp find NAME                # есть ли NAME (код 0/1 + status)
 #   cursor-stand.sh mcp enable NAME              # тоггл источника ON (проектный/user)
@@ -1299,13 +1301,17 @@ cmd_handoff() {
   adopt_if_live || load_state || { echo "стенд не поднят — сначала up" >&2; exit 1; }
   export DISPLAY="$DISP"
   [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ] && export DBUS_SESSION_BUS_ADDRESS
-  local email m_before
+  local email m_before inv_before
   email=$(cached_email)
   case "$email" in
     ''|'(нет state.vscdb)'|'(не залогинен)'|'(sqlite недоступен)')
-      echo "стенд не залогинен ($email). handoff без аккаунта не конвертирует RC." >&2
+      echo "стенд не залогинен. handoff без аккаунта не конвертирует RC." >&2
       exit 1 ;;
   esac
+  unset email
+  mkdir -p "$VAR"
+  inv_before="$VAR/inventory-before.txt"
+  python3 "$GLASS_AGENTS" inventory > "$inv_before" || : > "$inv_before"
   m_before=$(mouse1)
   local t0_ms prev_id prev_name shot pos x y
   t0_ms=$(date +%s%3N)
@@ -1629,13 +1635,36 @@ cmd_handoff() {
       ok=0
     }
   fi
-  local m_after
+  local m_after inv_after worker_line vnc_port
   m_after=$(mouse1)
   DISPLAY="$DISP" import -window "$wid" "$VAR/shots/handoff-$(date +%H%M%S).png" 2>/dev/null || true
   echo "мышь $ORIG_DISPLAY  до $m_before  после $m_after"
   if [ "$ok" -eq 1 ]; then
-    echo "handoff отправлен на $DISP (логин $email, папка $ws${name:+, имя $name})"
-    echo "проверь inbox: новая bc-id, не эта сессия. Снимок в $VAR/shots/"
+    inv_after="$VAR/inventory-after.txt"
+    python3 "$GLASS_AGENTS" inventory > "$inv_after" || : > "$inv_after"
+    if ! python3 "$GLASS_AGENTS" names-changed "$inv_before" "$inv_after" "$nid"; then
+      echo "handoff: чужая вкладка сменила имя — блок «куда смотреть» не подтверждаю" >&2
+      ok=0
+    fi
+  fi
+  if [ "$ok" -eq 1 ]; then
+    worker_line=$(python3 "$GLASS_AGENTS" show "$nid" | sed -n "s/^privateWorkerDisplayName=//p")
+    vnc_port="${CURSOR_STAND_VNC:-5916}"
+    echo "handoff отправлен"
+    echo "куда смотреть:"
+    echo "  bc-id $nid"
+    echo "  url https://cursor.com/agents/$nid"
+    echo "  class local-rc"
+    echo "  папка $ws"
+    echo "  воркер $worker_line"
+    if [ -n "$name" ]; then
+      echo "  имя $name"
+    fi
+    echo "  экран $DISP"
+    echo "  vnc localhost:$vnc_port"
+    echo "  мышь $ORIG_DISPLAY до $m_before после $m_after"
+    echo "  чужие вкладки не переименовывались"
+    echo "снимок в $VAR/shots/"
     write_ui_checked
   else
     echo "handoff: ОТКАЗ — сессия не готова (папка $ws${name:+, имя $name}). Снимок в $VAR/shots/" >&2
@@ -1888,6 +1917,36 @@ cmd_composer_send() {
   fi
   DISPLAY="$DISP" xdotool key --clearmodifiers Return
   echo "composer-send на $DISP ($x,$y)"
+  local sent_id="$expect" i saw=0 show pw
+  if [ -z "$sent_id" ]; then
+    sent_id=$(python3 "$GLASS_AGENTS" selected | head -1)
+  fi
+  [ -n "$sent_id" ] || { echo "composer-send: нет id вкладки" >&2; return 1; }
+  for i in $(seq 1 "$SQLITE_UI_WAIT_SEC"); do
+    if python3 "$GLASS_AGENTS" busy "$(hostname)" | awk -F '\t' -v id="$sent_id" '$1==id {found=1} END{exit !found}'; then
+      saw=1
+      break
+    fi
+    sleep 1
+  done
+  if [ "$saw" != 1 ]; then
+    echo "composer-send: ход $sent_id не начался за ${SQLITE_UI_WAIT_SEC} с" >&2
+    return 1
+  fi
+  show=$(python3 "$GLASS_AGENTS" show "$sent_id" 2>/dev/null || true)
+  pw=$(printf '%s\n' "$show" | sed -n "s/^privateWorkerDisplayName=//p")
+  ws=$(printf '%s\n' "$show" | sed -n "s/^workspaceRootPath=//p")
+  ws=${ws#\'}
+  ws=${ws%\'}
+  if [ -n "$ws" ] && [ "$ws" != "None" ]; then
+    case "$pw" in
+      *"'$ws"*|*"$ws"*) ;;
+      *)
+        echo "composer-send: воркер вкладки $sent_id не содержит папку $ws" >&2
+        return 1 ;;
+    esac
+  fi
+  echo "composer-send: ход начался у $sent_id"
 }
 
 cmd_pick_display() {
@@ -2046,6 +2105,77 @@ cmd_archive() {
   DISPLAY="$DISP" xdotool key --clearmodifiers Escape
   echo "archive: клик был, sqlite isArchived всё ещё false у $id (ждали ${SQLITE_UI_WAIT_SEC} с)" >&2
   exit 1
+}
+
+# discard --id <uuid>: локальный черновик без строки cloudAgentRepository.
+# Запись в базе — не эта команда. Stop на экране — отказ до клика.
+cmd_discard() {
+  [ "${1:-}" = "--id" ] && [ -n "${2:-}" ] || { echo "discard: нужен --id uuid черновика" >&2; exit 1; }
+  adopt_if_live || load_state || { echo "стенд не поднят — сначала up" >&2; exit 1; }
+  export DISPLAY="$DISP"
+  [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ] && export DBUS_SESSION_BUS_ADDRESS
+  local id=$2
+  if python3 "$GLASS_AGENTS" resolve --id "$id" >/dev/null 2>&1; then
+    echo "discard: $id есть в базе профиля — для записи archive или convert, не Discard" >&2
+    exit 1
+  fi
+  archive_protection_ok "$id" "" || exit 1
+  local m_before m_after shot
+  m_before=$(mouse1)
+  glass_focus_bcid "$id" "$id" || exit 1
+  local sel
+  sel=$(python3 "$GLASS_AGENTS" selected | head -1)
+  if [ "$sel" != "$id" ] && [ "$sel" != "bc-$id" ] && [ "${sel#bc-}" != "$id" ]; then
+    echo "discard: выделена '$sel', ждали $id — не кликаю" >&2
+    exit 1
+  fi
+  agents_window >/dev/null || exit 1
+  mkdir -p "$VAR/shots"
+  shot="$VAR/shots/_discard-stop.png"
+  DISPLAY="$DISP" import -window root "$shot" 2>/dev/null || DISPLAY="$DISP" scrot -o "$shot"
+  if python3 "$GLASS_AGENTS" stop-pos "$shot" --strict >/dev/null 2>&1; then
+    echo "discard: на экране Stop — ход идёт, не кликаю" >&2
+    exit 1
+  fi
+  local y
+  y=$(sidebar_selected_y) || { echo "discard: нет выделенной строки в сайдбаре" >&2; exit 1; }
+  if [ "$y" -lt 130 ]; then
+    echo "discard: выделено New Chat, не черновик (y=$y)" >&2
+    exit 1
+  fi
+  DISPLAY="$DISP" xdotool mousemove --sync 120 "$y"
+  sleep 0.15
+  DISPLAY="$DISP" xdotool click --clearmodifiers 3
+  sleep 0.5
+  shot="$VAR/shots/_discard-menu.png"
+  DISPLAY="$DISP" import -window root "$shot" 2>/dev/null || DISPLAY="$DISP" scrot -o "$shot"
+  local pos ax ay
+  pos=$(python3 "$GLASS_AGENTS" discard-pos "$shot") || {
+    DISPLAY="$DISP" xdotool key --clearmodifiers Escape
+    echo "discard: в меню нет пункта Discard. Снимок $shot" >&2
+    exit 1
+  }
+  ax=$(printf '%s\n' "$pos" | awk '{print $1}')
+  ay=$(printf '%s\n' "$pos" | awk '{print $2}')
+  DISPLAY="$DISP" xdotool mousemove --sync "$ax" "$ay" click --clearmodifiers 1
+  local i gone=0
+  for i in $(seq 1 "$SQLITE_UI_WAIT_SEC"); do
+    sel=$(python3 "$GLASS_AGENTS" selected | head -1)
+    if [ "$sel" != "$id" ] && [ "$sel" != "bc-$id" ] && [ "${sel#bc-}" != "$id" ]; then
+      if ! python3 "$GLASS_AGENTS" inventory | awk -F '\t' -v id="$id" '$1==id || $1=="bc-"id {found=1} END{exit !found}'; then
+        gone=1
+        break
+      fi
+    fi
+    sleep 1
+  done
+  if [ "$gone" != 1 ]; then
+    echo "discard: клик был, черновик $id всё ещё в описи (ждали ${SQLITE_UI_WAIT_SEC} с)" >&2
+    exit 1
+  fi
+  m_after=$(mouse1)
+  echo "discard: черновик $id убран"
+  echo "мышь $ORIG_DISPLAY  до $m_before  после $m_after"
 }
 
 # focus --id bc-…: открыть вкладку сессии (Search Agents, с проверкой палитры и sqlite).
@@ -2362,6 +2492,123 @@ cmd_settings() {
   return "$rc"
 }
 
+mcp_server_in_json() {
+  local file=$1 name=$2
+  [ -f "$file" ] || return 1
+  python3 - "$file" "$name" <<'PY'
+import json, sys
+try:
+    data = json.loads(open(sys.argv[1], encoding="utf-8").read())
+except (OSError, json.JSONDecodeError):
+    raise SystemExit(1)
+servers = data.get("mcpServers") if isinstance(data, dict) else None
+raise SystemExit(0 if isinstance(servers, dict) and sys.argv[2] in servers else 1)
+PY
+}
+
+mcp_probe_file() {
+  local file=$1 name=$2
+  [ -f "$file" ] || return 1
+  python3 - "$file" "$name" <<'PY'
+import json, sys
+try:
+    data = json.loads(open(sys.argv[1], encoding="utf-8").read())
+except (OSError, json.JSONDecodeError):
+    raise SystemExit(1)
+entry = (data.get("mcpServers") or {}).get(sys.argv[2]) or {}
+for arg in entry.get("args") or []:
+    if str(arg).endswith("mcp_probe.py"):
+        continue
+    if str(arg).startswith("/"):
+        print(arg)
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
+}
+
+# mcp ready NAME --id bc-…: сервер есть в json, включён в UI вкладки стенда,
+# и открытая local-rc это подтвердила. Тумблеры Settings → Agents не трогает.
+mcp_ready_tab() {
+  local name="" id=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --id)
+        [ $# -ge 2 ] || { echo "mcp ready: --id ждёт bc-id" >&2; return 1; }
+        id=$2; shift 2 ;;
+      --id=*) id=${1#--id=}; shift ;;
+      -*) echo "mcp ready: неизвестный флаг $1" >&2; return 1 ;;
+      *) name=$1; shift ;;
+    esac
+  done
+  [ -n "$name" ] && [ -n "$id" ] || { echo "mcp ready: нужно NAME --id bc-…" >&2; return 1; }
+  local show class ws
+  show=$(python3 "$GLASS_AGENTS" show "$id") || return 1
+  class=$(printf '%s\n' "$show" | sed -n 's/^class=//p')
+  [ "$class" = "local-rc" ] || { echo "mcp ready: $id класс $class, нужна вкладка local-rc" >&2; return 1; }
+  ws=$(printf '%s\n' "$show" | sed -n "s/^workspaceRootPath='\\(.*\\)'\$/\\1/p")
+  local json_hit=""
+  if [ -n "$ws" ] && mcp_server_in_json "$ws/.cursor/mcp.json" "$name"; then
+    json_hit="$ws/.cursor/mcp.json"
+  elif mcp_server_in_json "$HOME/.cursor/mcp.json" "$name"; then
+    json_hit="$HOME/.cursor/mcp.json"
+  else
+    echo "mcp ready: $name нет в mcp.json папки сессии и в пользовательском mcp.json" >&2
+    return 1
+  fi
+  local shot known line prev_id prev_name
+  prev_id=$(python3 "$GLASS_AGENTS" selected | head -1)
+  prev_name=$(python3 "$GLASS_AGENTS" resolve --id "$prev_id" 2>/dev/null | sed -n '2p' || true)
+  known=$(mcp_known_csv "$ws")
+  case ",$known," in *",$name,"*) ;; *) known="${known:+$known,}$name" ;; esac
+  shot=$(mcp_open_panel) || return 1
+  line=$(python3 "$GLASS_AGENTS" mcp-list "$shot" "$known" | awk -F '\t' -v n="$name" 'tolower($1)==tolower(n){print; exit}')
+  mcp_leave_panel "$prev_id" "$prev_name" || true
+  if [ -z "$line" ]; then
+    echo "mcp ready: '$name' нет во вкладке MCPs" >&2
+    return 1
+  fi
+  case "$line" in
+    *disabled*) echo "mcp ready: '$name' выключен в UI" >&2; return 1 ;;
+  esac
+  local probe=""
+  probe=$(mcp_probe_file "$json_hit" "$name" || true)
+  cmd_composer_send --id "$id" \
+    "If the MCP namespace $name is available, reply with exactly MCP-SEEN. If you have tool curskill_probe_ping, call it and reply with exactly its text. Otherwise reply with exactly MCP-MISSING." \
+    || return 1
+  local i
+  for i in $(seq 1 90); do
+    if [ -n "$probe" ] && [ -f "$probe" ] && grep -qE '^probe-ok-[0-9a-f]{16}$' "$probe"; then
+      break
+    fi
+    if python3 "$GLASS_AGENTS" busy "$(hostname)" | awk -F '\t' -v id="$id" '$1==id {found=1} END{exit !found}'; then
+      sleep 2
+      continue
+    fi
+    break
+  done
+  local proved=0
+  if [ -n "$probe" ] && [ -f "$probe" ] && grep -qE '^probe-ok-[0-9a-f]{16}$' "$probe"; then
+    proved=1
+    echo "mcp ready: инструмент записал токен"
+  fi
+  mkdir -p "$VAR/shots"
+  shot="$VAR/shots/_mcp-ready.png"
+  DISPLAY="$DISP" import -window root "$shot" 2>/dev/null || DISPLAY="$DISP" scrot -o "$shot"
+  if python3 "$GLASS_AGENTS" text-has "$shot" "MCP-SEEN"; then
+    proved=1
+    echo "mcp ready: вкладка ответила MCP-SEEN"
+  fi
+  if python3 "$GLASS_AGENTS" text-has "$shot" "probe-ok-"; then
+    proved=1
+    echo "mcp ready: вкладка ответила токеном инструмента"
+  fi
+  if [ "$proved" != 1 ]; then
+    echo "mcp ready: вкладка $id не подтвердила сервер $name" >&2
+    return 1
+  fi
+  echo "mcp ready: $name виден вкладке $id"
+}
+
 cmd_mcp() {
   local sub=${1:-}
   shift || true
@@ -2378,15 +2625,16 @@ cmd_mcp() {
   m_before=$(mouse1)
 
   case "$sub" in
-    list|find|enable|disable|add) ;;
+    list|find|enable|disable|add|ready) ;;
     *)
-      echo "mcp: нужен list|find|enable|disable|add" >&2
+      echo "mcp: нужен list|find|enable|disable|add|ready" >&2
       echo "  $0 mcp list" >&2
       echo "  $0 mcp find NAME" >&2
       echo "  $0 mcp enable NAME" >&2
       echo "  $0 mcp disable NAME" >&2
       echo "  $0 mcp add -w /ABS -n NAME --command /path [--arg …]" >&2
       echo "  $0 mcp add --user -n NAME --command /path" >&2
+      echo "  $0 mcp ready NAME --id bc-…" >&2
       exit 1 ;;
   esac
 
@@ -2489,6 +2737,9 @@ cmd_mcp() {
       fi
       mcp_leave_panel "$prev_id" "$prev_name"
       ;;
+    ready)
+      mcp_ready_tab "$@" || rc=$?
+      ;;
   esac
 
   m_after=$(mouse1)
@@ -2497,11 +2748,11 @@ cmd_mcp() {
 }
 
 usage() {
-  sed -n '2,49p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,51p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 case "$CMD" in
-  up|workers|handoff|convert|rename|composer-send|mcp|settings|archive|focus|park|down|down-display)
+  up|workers|handoff|convert|rename|composer-send|mcp|settings|archive|discard|focus|park|down|down-display)
     if [ "$locked" != 1 ]; then
       mkdir -p "$VAR"
       exec flock -o -w 900 "$VAR/.lock" "$0" --locked "$CMD" "$@"
@@ -2534,6 +2785,7 @@ case "$CMD" in
   rename) cmd_rename "$@" ;;
   focus) cmd_focus "$@" ;;
   archive) cmd_archive "$@" ;;
+  discard) cmd_discard "$@" ;;
   mcp) cmd_mcp "$@" ;;
   settings) cmd_settings "$@" ;;
   wait-worker) cmd_wait_worker "$@" ;;

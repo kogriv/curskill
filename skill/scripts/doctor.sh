@@ -5,6 +5,8 @@
 set -euo pipefail
 # shellcheck source=lib.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
+# shellcheck source=doctor_contract.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/doctor_contract.sh"
 
 fail=0
 ok() { printf 'ok   %s\n' "$1"; }
@@ -141,6 +143,11 @@ if [ -n "${DISP_SH:-}" ]; then
 fi
 
 DISP="${CURSOR_STAND_DISPLAY:-:105}"
+if DISPLAY="$DISP" xdotool search --name 'Cursor Agents' >/dev/null 2>&1; then
+  ok "окно Cursor Agents на $DISP есть"
+else
+  bad "окно Cursor Agents на $DISP нет"
+fi
 if xdpyinfo -display "$DISP" >/dev/null 2>&1; then
   num="${DISP#:}"
   pid=$(tr -d ' \n' < "/tmp/.X${num}-lock" 2>/dev/null || true)
@@ -203,9 +210,31 @@ if [ -n "$VER" ]; then
 else
   warn "не прочитал версию пакета Cursor"
 fi
-if [ -n "$checked" ] && [ -n "$VER" ] && [ "$checked" != "$VER" ]; then
-  warn "Cursor обновлён до $VER, handoff не проверен (ui-checked $checked)"
+anchor_rc=0
+anchor_out=$(doctor_anchor_lines "$VER" "$checked" "${CURSOR_STAND_UI_CALIBRATED:-}") || anchor_rc=$?
+if [ -n "$anchor_out" ]; then
+  while IFS= read -r anchor_line; do
+    case "$anchor_line" in
+      "якоря проверены для "*) ok "$anchor_line" ;;
+      *) warn "$anchor_line" ;;
+    esac
+  done <<<"$anchor_out"
 fi
+unset anchor_rc
+
+login_db="$PROFILE/User/globalStorage/state.vscdb"
+if [ -f "$login_db" ]; then
+  login_word=$(doctor_login_word "$login_db")
+  case "$login_word" in
+    да) ok "логин профиля да" ;;
+    нет) bad "логин профиля нет" ;;
+    *) bad "логин профиля не разобран" ;;
+  esac
+else
+  bad "логин профиля нет"
+fi
+worker_n=$(doctor_worker_count "$PROFILE")
+ok "воркеры профиля $worker_n"
 
 handoff_line=""
 if [ "${CURSKILL_SETUP_DONE:-}" != "1" ]; then

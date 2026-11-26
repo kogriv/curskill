@@ -160,6 +160,9 @@ scripts/wait-worker.sh /ABS/PROJECT
 scripts/stand.sh composer-send --id bc-…     # resend; the input box is found on the shot
 scripts/stand.sh rename --id bc-… name
 scripts/stand.sh archive --id bc-…           # probes and mistakes; not a running one
+scripts/stand.sh discard --id <uuid>         # draft with no database row
+scripts/glass.sh inventory                   # profile tabs, including local-draft
+scripts/stand.sh mcp ready NAME --id bc-…    # server is visible to this local-rc tab
 scripts/stand.sh mcp list                    # Customize → MCPs
 scripts/stand.sh mcp find NAME
 scripts/stand.sh mcp enable NAME             # source toggle ON
@@ -574,8 +577,42 @@ and the GPU go there, not into this skill. See [hosts.md](hosts.md).
 
 Runtime, shots, `state.env`, and `hold` live in `$PROFILE/var`, outside git.
 
+## What this skill does not take over
+
+The development order and the reasons are in
+[skill/docs/roadmap/README.md](docs/roadmap/README.md). Open work is
+BL-067…BL-078. BL-067 is a measurement; until it is written down, do not
+add new clicks on the folder chip or the Run on chip. Do not start those
+tasks from this file. Start one only when the person asked for that task.
+
+This skill does not take over:
+
+- A wrapper around the terminal agent: `agent -p` / `--print`, `agent persist`
+  (`list`, `attach`, `stop`), `agent ls`, `agent resume`, `--continue`,
+  `--resume`, the worktree flags (`-w`, `--worktree-base`,
+  `--skip-worktree-setup`), `--sandbox`, `--model`, `agent models`,
+  `--list-models`, plan/ask mode, `agent generate-rule`, `agent plugin`.
+- Starting `agent worker` or running a pool: `--pool`, `--worker-dir` as a
+  substitute for handoff, `--label`, `--labels-file`, `--management-addr`,
+  `--idle-release-timeout`, `--mint-github-token`, `--clone-git-repos`,
+  `--sync-dashboard-secrets`, `--on-session-start`, `--on-session-end`,
+  `--identity-socket`.
+- A second MCP approval list for the CLI. `agent mcp login`, `list`,
+  `list-tools`, `enable`, and `disable` stay CLI commands. Bringing a server
+  to a stand-profile tab is BL-076.
+- Creating a Cloud Agent, or using one instead of a stand tab. `agent
+  create-chat` stays a forbidden substitute for handoff.
+- Opening files and comparing them. The desktop `cursor` flags `--goto`,
+  `--diff`, `--merge`, `--add`, `--remove`, and `--wait` stay with `cursor`.
+  `--glass` still only opens the window and does not create a session.
+- A second Settings → Agents editor, and clicks on that page's toggles.
+  Reading the page is `settings agents`, BL-077.
+- A separate remote-desktop product. Looking at the stand screen is x11vnc
+  on localhost. The handoff reply says where, BL-078.
+
 ## Lab notes (do not paste into the user's reply)
 
 - screen — [display.md](display.md)
 - hosts — [hosts.md](hosts.md)
 - failures, coordinates, sqlite — [reference.md](reference.md)
+- roadmap and the open tasks — [docs/roadmap/README.md](docs/roadmap/README.md)

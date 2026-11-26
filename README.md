@@ -14,7 +14,7 @@ Russian: [README.ru.md](README.ru.md). English is the copy to follow.
 | Failures, anchors, sqlite | [reference.md](skill/reference.md) | [reference.ru.md](skill/reference.ru.md) |
 | One stand per machine | [hosts.md](skill/hosts.md) | [hosts.ru.md](skill/hosts.ru.md) |
 | Script index | [automation/README.md](automation/README.md) | [automation/README.ru.md](automation/README.ru.md) |
-| Gaps, design, backlog | [skill/docs](skill/docs/README.md) | same notes, Russian |
+| Gaps, design, backlog, roadmap | [skill/docs](skill/docs/README.md) | same notes, Russian |
 
 A separate X11 display for Cursor Agents Window and Remote Control.
 Its own `DISPLAY`, its own profile. It does not touch the mouse on the

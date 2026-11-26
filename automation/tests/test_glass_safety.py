@@ -11,6 +11,11 @@ from automation.glass_agents import (
     agent_on_host,
     archive_menu_click,
     classify,
+    discard_menu_click,
+    foreign_name_changes,
+    format_settings_report,
+    inventory_lines,
+    settings_target_forbidden,
     composer_click,
     find_anchor,
     handoff_failure,
@@ -302,6 +307,157 @@ class McpModeTests(unittest.TestCase):
             os.chmod(path, 0o640)
             merge_mcp_json(path, "demo", command="echo")
             self.assertEqual(os.stat(path).st_mode & 0o777, 0o640)
+
+
+class InventoryTests(unittest.TestCase):
+    def test_four_kinds_and_a_draft(self):
+        agents = [
+            _agent(bcId="bc-rc", name="rc", status=1),
+            _agent(
+                bcId="bc-env",
+                name="env",
+                workspaceRootPath="/workspace",
+                cloudTargetKey="logicalEnvironment:x",
+                usePrivateWorker=False,
+                privateWorkerDisplayName="",
+                status=0,
+            ),
+            _agent(
+                bcId="bc-inc",
+                name="inc",
+                usePrivateWorker=True,
+                privateWorkerDisplayName="",
+                workspaceRootPath="",
+                status=0,
+            ),
+            {"bcId": "bc-old", "name": "old", "isArchived": True},
+        ]
+        lines = inventory_lines(agents, "11111111-1111-4111-8111-111111111111")
+        text = "\n".join(lines)
+        self.assertIn("bc-rc\trc\t/data/proj\tlocal-rc\t1\t", text)
+        self.assertIn("\tenvironment\t", text)
+        self.assertIn("\tprivate-incomplete\t", text)
+        self.assertIn("11111111-1111-4111-8111-111111111111\t\t\tlocal-draft\t?\t", text)
+        self.assertNotIn("bc-old", text)
+
+    def test_selected_row_is_not_a_second_draft(self):
+        agents = [_agent()]
+        lines = inventory_lines(agents, "bc-aaa")
+        self.assertEqual(len(lines), 1)
+
+    def test_foreign_rename_ignores_the_new_id(self):
+        before = "bc-keep\told\t/data/a\tlocal-rc\t0\t/data/a @ h\nbc-new\tready\t/tmp/x\tlocal-rc\t0\t"
+        after = "bc-keep\told\t/data/a\tlocal-rc\t0\t/data/a @ h\nbc-new\trenamed\t/tmp/x\tlocal-rc\t0\t"
+        self.assertEqual(foreign_name_changes(before, after, "bc-new"), [])
+        after_bad = "bc-keep\tother\t/data/a\tlocal-rc\t0\t/data/a @ h\n"
+        self.assertEqual(
+            foreign_name_changes(before, after_bad, "bc-new"),
+            ["bc-keep\told\tother"],
+        )
+
+
+class DiscardClickTests(unittest.TestCase):
+    def test_discard_in_the_menu(self):
+        words = [_w(120, 400, 60, 14, "Discard")]
+        self.assertEqual(discard_menu_click(words), (150, 407))
+
+    def test_archive_is_not_discard(self):
+        words = [_w(120, 400, 60, 14, "Archive"), _w(120, 430, 40, 14, "All"), _w(170, 430, 50, 14, "Below")]
+        self.assertIsNone(discard_menu_click(words))
+
+    def test_discard_in_the_transcript_is_ignored(self):
+        words = [_w(800, 400, 60, 14, "Discard")]
+        self.assertIsNone(discard_menu_click(words))
+
+
+class SettingsReportTests(unittest.TestCase):
+    def test_labels_for_the_required_rows(self):
+        merged = {
+            "remote_control": ("on", "Connected"),
+            "self_hosted_workers": ("on", ""),
+            "new_messages": ("queue", ""),
+            "run_mode": ("auto", ""),
+            "read_access": ("on", ""),
+            "file_deletion_protection": ("on", ""),
+            "external_file_protection": ("on", ""),
+            "web_search": ("on", ""),
+            "wait_mcp_auth": ("off", ""),
+            "computer_use_apps": ("none", "No always-allowed apps"),
+            "legacy_terminal": ("off", ""),
+        }
+        text = "\n".join(format_settings_report(merged))
+        for label in (
+            "Remote Control\ton\tConnected",
+            "self-hosted workers\ton\t",
+            "New Messages\tqueue\t",
+            "Run Mode\tauto\t",
+            "Read Access\ton\t",
+            "File-Deletion Protection\ton\t",
+            "External-File Protection\ton\t",
+            "Web Search\ton\t",
+            "Wait for MCP Authentication\toff\t",
+            "Computer Use\tnone\tNo always-allowed apps",
+            "Legacy Terminal\toff\t",
+        ):
+            self.assertIn(label, text)
+
+    def test_unregister_and_cloud_are_forbidden_targets(self):
+        self.assertTrue(
+            settings_target_forbidden([_w(80, 240, 80, 14, "Unregister")], 120, 247, "settings-item")
+        )
+        self.assertTrue(
+            settings_target_forbidden([_w(80, 200, 40, 14, "Cloud")], 100, 207, "agents-nav")
+        )
+        self.assertFalse(
+            settings_target_forbidden([_w(40, 200, 50, 14, "Agents")], 65, 207, "agents-nav")
+        )
+
+
+class ProbeServerTests(unittest.TestCase):
+    def test_tool_call_writes_the_token(self):
+        import json
+        import subprocess
+
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "token"
+            proc = subprocess.Popen(
+                ["python3", "automation/mcp_probe.py", str(out)],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+            )
+            assert proc.stdin and proc.stdout
+
+            def send(payload: dict) -> dict:
+                body = json.dumps(payload).encode()
+                proc.stdin.write(f"Content-Length: {len(body)}\r\n\r\n".encode() + body)
+                proc.stdin.flush()
+                header = proc.stdout.readline()
+                self.assertTrue(header.lower().startswith(b"content-length:"))
+                length = int(header.split(b":", 1)[1].strip())
+                self.assertEqual(proc.stdout.readline(), b"\r\n")
+                return json.loads(proc.stdout.read(length))
+
+            try:
+                init = send({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+                self.assertEqual(init["result"]["serverInfo"]["name"], "curskill-probe")
+                listed = send({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+                self.assertEqual(listed["result"]["tools"][0]["name"], "curskill_probe_ping")
+                called = send(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 3,
+                        "method": "tools/call",
+                        "params": {"name": "curskill_probe_ping", "arguments": {}},
+                    }
+                )
+                token = called["result"]["content"][0]["text"]
+                self.assertRegex(token, r"^probe-ok-[0-9a-f]{16}$")
+                self.assertEqual(out.read_text(encoding="utf-8").strip(), token)
+            finally:
+                if proc.stdin:
+                    proc.stdin.close()
+                proc.kill()
+                proc.wait(timeout=5)
 
 
 if __name__ == "__main__":

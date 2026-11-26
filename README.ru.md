@@ -14,7 +14,7 @@
 | Отказы, якоря, sqlite | [reference.ru.md](skill/reference.ru.md) | [reference.md](skill/reference.md) |
 | Один стенд на машину | [hosts.ru.md](skill/hosts.ru.md) | [hosts.md](skill/hosts.md) |
 | Указатель скриптов | [automation/README.ru.md](automation/README.ru.md) | [automation/README.md](automation/README.md) |
-| Разрывы, решения, бэклог | [skill/docs](skill/docs/README.md) | те же заметки |
+| Разрывы, решения, бэклог, роадмап | [skill/docs](skill/docs/README.md) | те же заметки |
 
 Отдельный X11-экран для Cursor Agents Window и Remote Control: свой
 `DISPLAY`, свой профиль, мышь стола владельца не трогает.

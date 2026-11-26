@@ -627,6 +627,88 @@ def archive_menu_click(
     return x + w // 2, y + h // 2
 
 
+def discard_menu_click(
+    words: list[tuple[int, int, int, int, float, str]],
+) -> tuple[int, int] | None:
+    """Пункт Discard в меню сайдбара. Не Archive и не Archive All Below."""
+    below_ys = [y for x, y, _w, _h, _c, t in words if t.lower() == "below" and 90 <= x <= 460]
+    all_ys = [y for x, y, _w, _h, _c, t in words if t.lower() == "all" and 90 <= x <= 460]
+    hits = [
+        (x, y, w, h)
+        for x, y, w, h, _c, t in words
+        if t.lower() == "discard"
+        and 90 <= x <= 460
+        and all(abs(y - by) > 12 for by in below_ys)
+        and all(abs(y - ay) > 12 for ay in all_ys)
+    ]
+    if not hits:
+        return None
+    x, y, w, h = hits[0]
+    return x + w // 2, y + h // 2
+
+
+def inventory_lines(agents: list[dict], selected: str | None) -> list[str]:
+    """Вкладки профиля: id, имя, папка, класс, ход, воркер.
+
+    Черновик без строки cloudAgentRepository — kind=local-draft.
+    Архив и killed не входят.
+    """
+    lines: list[str] = []
+    seen: set[str] = set()
+    for a in agents:
+        if a.get("isArchived") or a.get("isKilled"):
+            continue
+        bid = str(a.get("bcId") or "")
+        uid = bare_uuid(bid) or bid
+        if uid:
+            seen.add(uid)
+        working = "1" if a.get("status") == 1 else "0"
+        lines.append(
+            "\t".join(
+                (
+                    bid,
+                    str(a.get("name") or ""),
+                    str(a.get("workspaceRootPath") or ""),
+                    classify(a),
+                    working,
+                    str(a.get("privateWorkerDisplayName") or ""),
+                )
+            )
+        )
+    uid = bare_uuid(selected)
+    if uid and uid not in seen:
+        lines.append(f"{uid}\t\t\tlocal-draft\t?\t")
+    return lines
+
+
+def foreign_name_changes(before: str, after: str, new_id: str) -> list[str]:
+    """Чужие вкладки, у которых между двумя описями сменилось имя."""
+
+    def names(text: str) -> dict[str, str]:
+        out: dict[str, str] = {}
+        for line in text.splitlines():
+            parts = line.split("\t")
+            if not parts or not parts[0]:
+                continue
+            out[parts[0]] = parts[1] if len(parts) > 1 else ""
+        return out
+
+    old, new = names(before), names(after)
+    skip = {new_id}
+    uid = bare_uuid(new_id)
+    if uid:
+        skip.add(uid)
+        skip.add(f"bc-{uid}")
+    changed: list[str] = []
+    for ident, name in old.items():
+        bare = bare_uuid(ident) or ident
+        if ident in skip or bare in skip or f"bc-{bare}" in skip:
+            continue
+        if ident in new and new[ident] != name:
+            changed.append(f"{ident}\t{name}\t{new[ident]}")
+    return changed
+
+
 def _row_token_hits(part: str, tokens: list[str]) -> bool:
     """Слово имени есть в строке. OCR режет хвост: instruction → instruc."""
     for tok in tokens:
@@ -1323,6 +1405,47 @@ AGENTS_SETTINGS_REQUIRED = (
     "new_messages",
 )
 
+# Печать settings agents. Ключ остаётся в коде, в строке — устойчивое имя.
+AGENTS_SETTINGS_LABELS = {
+    "remote_control": "Remote Control",
+    "self_hosted_workers": "self-hosted workers",
+    "new_messages": "New Messages",
+    "run_mode": "Run Mode",
+    "read_access": "Read Access",
+    "file_deletion_protection": "File-Deletion Protection",
+    "external_file_protection": "External-File Protection",
+    "web_search": "Web Search",
+    "wait_mcp_auth": "Wait for MCP Authentication",
+    "computer_use_apps": "Computer Use",
+    "legacy_terminal": "Legacy Terminal",
+}
+
+
+def format_settings_report(merged: dict[str, tuple[str, str]]) -> list[str]:
+    order = [spec["key"] for spec in _AGENTS_ROWS] + [
+        "allowlist_options",
+        "computer_use_apps",
+    ]
+    lines: list[str] = []
+    for key in order:
+        if key not in merged:
+            continue
+        value, detail = merged[key]
+        label = AGENTS_SETTINGS_LABELS.get(key, key)
+        lines.append(f"{label}\t{value}\t{detail}")
+    return lines
+
+
+def settings_target_forbidden(
+    words: list[tuple[int, int, int, int, float, str]], x: int, y: int, step: str
+) -> bool:
+    """Точка настроек попадает в запретную подпись."""
+    if _near_token(words, x, y, {"unregister", "logout", "docs", "build", "manage"}, radius=42):
+        return True
+    if step == "agents-nav" and _near_token(words, x, y, {"cloud"}, radius=28):
+        return True
+    return False
+
 
 def _label_eq(got: str, want: str) -> bool:
     """Равенство подписи. Не подстрока: «register» не должен совпасть с Unregister."""
@@ -1612,16 +1735,7 @@ def settings_click_pos(shot: Path, step: str) -> tuple[int, int] | None:
         return None
     if point is None:
         return None
-    forbidden = _near_token(
-        words,
-        point[0],
-        point[1],
-        {"unregister", "logout", "docs", "build", "manage"},
-        radius=42,
-    )
-    if forbidden:
-        return None
-    if step == "agents-nav" and _near_token(words, point[0], point[1], {"cloud"}, radius=28):
+    if settings_target_forbidden(words, point[0], point[1], step):
         return None
     return point
 
@@ -1720,6 +1834,24 @@ def main(argv: list[str]) -> int:
             print(err, file=sys.stderr)
             return 1
         return 0
+    if cmd == "inventory":
+        sel, _last = selected_ids()
+        for line in inventory_lines(load_agents(), sel):
+            print(line)
+        return 0
+    if cmd == "names-changed":
+        # names-changed BEFORE_FILE AFTER_FILE NEW_ID
+        if len(argv) < 5:
+            print("names-changed BEFORE AFTER NEW_ID", file=sys.stderr)
+            return 2
+        changes = foreign_name_changes(
+            Path(argv[2]).read_text(encoding="utf-8"),
+            Path(argv[3]).read_text(encoding="utf-8"),
+            argv[4],
+        )
+        for line in changes:
+            print(line)
+        return 1 if changes else 0
     if cmd == "mine":
         # RC @ host (по одной свежей на папку) + локальные чаты без bc-/без worker.
         # Колонки: id TAB name TAB ws TAB kind TAB working
@@ -1921,6 +2053,22 @@ def main(argv: list[str]) -> int:
                 print(x + w // 2, y + h // 2)
                 return 0
         return 1
+    if cmd == "text-has":
+        # text-has SHOT NEEDLE → 0, если OCR содержит иголку. Текст снимка не печатает.
+        if len(argv) < 4:
+            print("text-has SHOT NEEDLE", file=sys.stderr)
+            return 2
+        text = ocr_image(Path(argv[2]))
+        needle = argv[3]
+        compact = re.sub(r"[^A-Za-z0-9-]", "", text)
+        return 0 if needle in text or needle in compact else 1
+    if cmd == "discard-pos":
+        shot = Path(argv[2])
+        pos = discard_menu_click(ocr_words(shot))
+        if not pos:
+            return 1
+        print(pos[0], pos[1])
+        return 0
     if cmd == "archive-pos":
         # Клик Archive в контекстном меню сайдбара, не «Archive All Below».
         hit = archive_menu_click(ocr_words(Path(argv[2])))
@@ -2045,15 +2193,8 @@ def main(argv: list[str]) -> int:
         if not merged:
             print("agents-settings: на снимках нет страницы Settings", file=sys.stderr)
             return 1
-        order = [spec["key"] for spec in _AGENTS_ROWS] + [
-            "allowlist_options",
-            "computer_use_apps",
-        ]
-        for key in order:
-            if key not in merged:
-                continue
-            value, detail = merged[key]
-            print(f"{key}\t{value}\t{detail}")
+        for line in format_settings_report(merged):
+            print(line)
         missing = [k for k in AGENTS_SETTINGS_REQUIRED if k not in merged or merged[k][0] in {"unseen", ""}]
         if missing:
             print("agents-settings: не разобраны " + ",".join(missing), file=sys.stderr)
@@ -2081,9 +2222,9 @@ def main(argv: list[str]) -> int:
         print(pos[0], pos[1])
         return 0
     print(
-        "usage: resolve|selected|palette-ok|newest|mine|other|busy|"
+        "usage: resolve|selected|palette-ok|newest|mine|inventory|names-changed|other|busy|"
         "composer-pos|palette-open|show|created-since|handoff-ok|"
-        "is-archived|archive-pos|menu-pos|stop-pos|anchor|convert-ok|"
+        "is-archived|archive-pos|discard-pos|menu-pos|stop-pos|anchor|convert-ok|"
         "overlay-scan|"
         "mcp-list|mcp-row-pos|mcp-toggle|mcp-done-pos|mcp-merge-json|"
         "agents-settings|agents-settings-bottom|settings-pos",
