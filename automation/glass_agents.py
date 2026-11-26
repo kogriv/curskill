@@ -972,6 +972,30 @@ def mcp_list_from_shot(
                 "y": str(click[1]),
             }
         )
+    # Имя в колонке есть, а слово Disabled/enabled OCR не прочитал
+    # (26.11.2026 mcp-list-104458: curskill-probe виден, слова Disabled нет).
+    seen = {r["name"].lower() for r in rows}
+    for kn in names:
+        if kn.lower() in seen:
+            continue
+        hit = None
+        for x, y, w, h, _c, t in zone_words:
+            if _ocr_name_match(t, kn):
+                hit = (x, y, w, h)
+                break
+        if hit is None:
+            continue
+        x, y, w, h = hit
+        rows.append(
+            {
+                "name": kn,
+                "status": "unknown",
+                "detail": "",
+                "x": str(x + w // 2),
+                "y": str(y + h // 2),
+            }
+        )
+        seen.add(kn.lower())
     rows.sort(key=lambda r: int(r["y"]))
     known_list = names
     for row in rows:
@@ -1054,8 +1078,15 @@ def mcp_source_toggle(shot: Path) -> tuple[str, int, int] | None:
     row_y = None
     for x, y, _w, _h, _c, t in ocr_words(shot):
         tl = t.lower().replace(" ", "")
-        if "mcp.json" in tl or "mcpjson" in tl or "cursor/mcp" in tl or "cursor/mep" in tl:
-            if 700 <= x <= 1000:
+        # 26.11.2026 mcp-cfg-104652: «.cursor/mcp.json» прочитан как imepjson.
+        if (
+            "mcp.json" in tl
+            or "mcpjson" in tl
+            or "mepjson" in tl
+            or "cursor/mcp" in tl
+            or "cursor/mep" in tl
+        ):
+            if 700 <= x <= 1100:
                 row_y = y + _h // 2
                 break
     if row_y is None:
@@ -1082,6 +1113,23 @@ def mcp_source_toggle(shot: Path) -> tuple[str, int, int] | None:
                 green += 1
             if r > 220 and g > 220 and b > 220:
                 whites.append((x, y))
+    # Светлая модалка: фон белый, и «knob» из всех белых пикселей — это середина окна.
+    # Выключенная дорожка — серая пилюля (mcp-cfg-104652: x 1099–1130, y 506–525).
+    if len(whites) > 800 and green < 20:
+        pill = [
+            (x, y)
+            for y in range(y0, y1)
+            for x in range(x0, max(x0 + 1, x1 - 4))
+            for r, g, b in [px[x, y]]
+            if 190 <= r <= 236 and abs(r - g) < 15 and abs(g - b) < 15
+        ]
+        if len(pill) < 40:
+            return None
+        xs = [p[0] for p in pill]
+        ys = [p[1] for p in pill]
+        if not (18 <= max(xs) - min(xs) <= 60 and 8 <= max(ys) - min(ys) <= 28):
+            return None
+        return "off", (min(xs) + max(xs)) // 2, (min(ys) + max(ys)) // 2
     if not whites and green < 15:
         return None
     if whites:

@@ -5,6 +5,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from automation.glass_agents import (
     _ocr_name_match,
@@ -20,6 +21,7 @@ from automation.glass_agents import (
     find_anchor,
     handoff_failure,
     load_agents,
+    mcp_list_from_shot,
     mcp_source_toggle,
     merge_mcp_json,
     palette_is_open,
@@ -391,6 +393,36 @@ class DiscardClickTests(unittest.TestCase):
     def test_discard_in_the_transcript_is_ignored(self):
         words = [_w(800, 400, 60, 14, "Discard")]
         self.assertIsNone(discard_menu_click(words))
+
+
+class McpPanelTests(unittest.TestCase):
+    def test_known_name_without_a_status_word_is_unknown(self):
+        words = [(777, 444, 81, 13, 90.0, "curskill-probe")]
+        with tempfile.TemporaryDirectory() as d:
+            shot = Path(d) / "mcp.png"
+            shot.write_bytes(b"")
+            with patch("automation.glass_agents.ocr_words", return_value=words):
+                rows = mcp_list_from_shot(shot, ["curskill-probe"])
+        self.assertEqual(rows[0]["name"], "curskill-probe")
+        self.assertEqual(rows[0]["status"], "unknown")
+
+    def test_light_dialog_off_toggle_is_the_gray_pill(self):
+        from PIL import Image
+
+        im = Image.new("RGB", (1920, 1080), (151, 151, 151))
+        for y in range(400, 700):
+            for x in range(760, 1160):
+                im.putpixel((x, y), (246, 246, 246))
+        for y in range(506, 526):
+            for x in range(1099, 1131):
+                im.putpixel((x, y), (220, 220, 220))
+        words = [(859, 523, 45, 9, 90.0, "imepjson")]
+        with tempfile.TemporaryDirectory() as d:
+            shot = Path(d) / "cfg.png"
+            im.save(shot)
+            with patch("automation.glass_agents.ocr_words", return_value=words):
+                hit = mcp_source_toggle(shot)
+        self.assertEqual(hit, ("off", 1114, 515))
 
 
 class SettingsReportTests(unittest.TestCase):

@@ -2585,6 +2585,9 @@ mcp_ready_tab() {
   fi
   case "$line" in
     *disabled*) echo "mcp ready: '$name' выключен в UI" >&2; return 1 ;;
+    *$'\t'unknown$'\t'*)
+      echo "mcp ready: '$name' виден, но слово статуса не прочитано — сначала mcp enable" >&2
+      return 1 ;;
   esac
   local probe=""
   probe=$(mcp_probe_file "$json_hit" "$name" || true)
