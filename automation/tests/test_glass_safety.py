@@ -14,6 +14,7 @@ from automation.glass_agents import (
     classify,
     discard_menu_click,
     foreign_name_changes,
+    reply_has,
     format_settings_report,
     inventory_lines,
     settings_target_forbidden,
@@ -439,6 +440,16 @@ class McpPanelTests(unittest.TestCase):
             with patch("automation.glass_agents.ocr_words", return_value=words):
                 hit = mcp_done_pos(shot)
         self.assertEqual(hit, (1115, 680))
+
+    def test_prompt_word_is_not_the_reply(self):
+        # _mcp-ready.png: просьба справа содержит MCP-SEEN, ответ слева — MCP-MISSING.
+        words = [
+            _w(892, 311, 70, 12, "MCP-SEEN."),
+            _w(472, 359, 80, 12, "MCP-MISSING."),
+            _w(307, 558, 90, 14, "MCP-MISSING"),
+        ]
+        self.assertFalse(reply_has(words, "MCP-SEEN"))
+        self.assertTrue(reply_has(words, "MCP-MISSING"))
 
 
 class SettingsReportTests(unittest.TestCase):

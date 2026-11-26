@@ -16,12 +16,23 @@ def _read_message() -> dict | None:
     line = sys.stdin.buffer.readline()
     if not line:
         return None
-    if line.lower().startswith(b"content-length:"):
-        length = int(line.split(b":", 1)[1].strip())
-        while True:
-            extra = sys.stdin.buffer.readline()
-            if extra in (b"\r\n", b"\n", b""):
+    # Клиент может начать с Content-Type, а Content-Length поставить вторым заголовком.
+    if line[:1] != b"{" and b":" in line[:40]:
+        headers = [line]
+        while line not in (b"\r\n", b"\n", b""):
+            line = sys.stdin.buffer.readline()
+            if not line:
                 break
+            headers.append(line)
+            if line in (b"\r\n", b"\n"):
+                break
+        length = None
+        for header in headers:
+            if header.lower().startswith(b"content-length:"):
+                length = int(header.split(b":", 1)[1].strip())
+        if length is None:
+            print("mcp_probe: кадр без Content-Length", file=sys.stderr, flush=True)
+            return None
         body = sys.stdin.buffer.read(length)
         return json.loads(body.decode("utf-8"))
     return json.loads(line.decode("utf-8"))
@@ -50,17 +61,27 @@ def main() -> int:
         print("mcp_probe: нужен путь файла токена", file=sys.stderr)
         return 2
     out = Path(sys.argv[1])
+    print("mcp_probe ready", file=sys.stderr, flush=True)
     while True:
-        msg = _read_message()
+        try:
+            msg = _read_message()
+        except (json.JSONDecodeError, UnicodeError, ValueError) as exc:
+            print(f"mcp_probe read {type(exc).__name__}", file=sys.stderr, flush=True)
+            return 1
         if msg is None:
             return 0
         method = msg.get("method")
         msg_id = msg.get("id")
+        print(f"mcp_probe method={method}", file=sys.stderr, flush=True)
         if method == "initialize":
+            version = "2024-11-05"
+            params = msg.get("params")
+            if isinstance(params, dict) and isinstance(params.get("protocolVersion"), str):
+                version = params["protocolVersion"]
             _result(
                 msg_id,
                 {
-                    "protocolVersion": "2024-11-05",
+                    "protocolVersion": version,
                     "capabilities": {"tools": {}},
                     "serverInfo": {"name": "curskill-probe", "version": "1"},
                 },

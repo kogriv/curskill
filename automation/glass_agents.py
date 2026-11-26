@@ -632,6 +632,20 @@ def archive_menu_click(
     return x + w // 2, y + h // 2
 
 
+def reply_has(
+    words: list[tuple[int, int, int, int, float, str]], needle: str
+) -> bool:
+    """Слово в ответе ассистента, не в пузыре просьбы.
+
+    26.11.2026 _mcp-ready.png: просьба справа содержит MCP-SEEN (892,311),
+    ответ слева ниже — MCP-MISSING (307,558).
+    """
+    parts = [t for x, y, _w, _h, _c, t in words if x < 700 and y > 420]
+    text = " ".join(parts)
+    compact = re.sub(r"[^A-Za-z0-9-]", "", text)
+    return needle in text or needle in compact
+
+
 def discard_menu_click(
     words: list[tuple[int, int, int, int, float, str]],
 ) -> tuple[int, int] | None:
@@ -2133,6 +2147,12 @@ def main(argv: list[str]) -> int:
         needle = argv[3]
         compact = re.sub(r"[^A-Za-z0-9-]", "", text)
         return 0 if needle in text or needle in compact else 1
+    if cmd == "reply-has":
+        # reply-has SHOT NEEDLE → 0, если иголка в ответе слева, не в просьбе.
+        if len(argv) < 4:
+            print("reply-has SHOT NEEDLE", file=sys.stderr)
+            return 2
+        return 0 if reply_has(ocr_words(Path(argv[2])), argv[3]) else 1
     if cmd == "discard-pos":
         shot = Path(argv[2])
         pos = discard_menu_click(ocr_words(shot))

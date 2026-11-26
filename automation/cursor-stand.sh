@@ -2357,6 +2357,15 @@ mcp_set_enabled() {
     echo "mcp: не удалось выставить $name → $want (сейчас ${state:-?})" >&2
     return 1
   fi
+  # Сервер, включённый в уже открытом чате, остаётся без инструментов,
+  # пока карточку не перезагрузят (26.11.2026: toolCount 0, статус Connecting).
+  if pos=$(python3 "$GLASS_AGENTS" anchor "$shot" mcp-reload 2>/dev/null); then
+    read -r x y <<<"$pos"
+    echo "mcp: Reload $x,$y"
+    mcp_click_xy "$x" "$y"
+    sleep 2.0
+    shot=$(mcp_shot mcp-cfg)
+  fi
   pos=$(python3 "$GLASS_AGENTS" mcp-done-pos "$shot") || {
     echo "mcp: нет кнопки Done" >&2
     return 1
@@ -2610,11 +2619,13 @@ mcp_ready_tab() {
   mkdir -p "$VAR/shots"
   shot="$VAR/shots/_mcp-ready.png"
   DISPLAY="$DISP" import -window root "$shot" 2>/dev/null || DISPLAY="$DISP" scrot -o "$shot"
-  if python3 "$GLASS_AGENTS" text-has "$shot" "MCP-SEEN"; then
+  if python3 "$GLASS_AGENTS" reply-has "$shot" "MCP-MISSING"; then
+    echo "mcp ready: вкладка ответила MCP-MISSING" >&2
+  elif python3 "$GLASS_AGENTS" reply-has "$shot" "MCP-SEEN"; then
     proved=1
     echo "mcp ready: вкладка ответила MCP-SEEN"
   fi
-  if python3 "$GLASS_AGENTS" text-has "$shot" "probe-ok-"; then
+  if python3 "$GLASS_AGENTS" reply-has "$shot" "probe-ok-"; then
     proved=1
     echo "mcp ready: вкладка ответила токеном инструмента"
   fi
