@@ -20,6 +20,7 @@ description: >-
 # Curskill (Agents Window + Remote Control)
 
 Английский — источник правды, его и выполняет агент: [SKILL.md](SKILL.md).
+Описание возможностей: [capabilities.ru.md](capabilities.ru.md).
 Зачем стенд существует: [README.ru.md](../README.ru.md).
 
 Штатного API «новая вкладка glass + `/remote-control`» нет. CLI `agent` и

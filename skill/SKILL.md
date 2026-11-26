@@ -20,6 +20,7 @@ description: >-
 # Curskill (Agents Window + Remote Control)
 
 Russian: [SKILL.ru.md](SKILL.ru.md). English is the copy the agent follows.
+What the skill can do: [capabilities.md](capabilities.md).
 
 There is no API for "a new glass tab plus `/remote-control`". The `agent`
 CLI and Cloud Agents are **other** sessions. Do not click the owner's

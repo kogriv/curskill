@@ -57,6 +57,9 @@ for f in "$skill" "$skillru" "$road"; do
   grep -q 'until it is written down' "$f" && { echo "living text still waits on BL-067: $f" >&2; exit 1; }
 done
 
+grep -q 'skill/capabilities.ru.md' "$root/README.ru.md"
+grep -q 'Описание возможностей' "$root/README.ru.md"
+grep -q 'skill/capabilities.md' "$root/README.md"
 grep -q 'agent worker start' "$skill"
 grep -q 'agent worker start' "$skillru"
 grep -q 'agent worker start' "$road"

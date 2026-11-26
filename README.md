@@ -2,6 +2,8 @@
 
 Russian: [README.ru.md](README.ru.md). English is the copy to follow.
 
+What the skill can do, command by command: [capabilities.md](skill/capabilities.md).
+
 ## Docs
 
 | | English | Russian |

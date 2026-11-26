@@ -2,6 +2,8 @@
 
 Английский — источник правды: [README.md](README.md).
 
+Описание возможностей, команда за командой: [capabilities.ru.md](skill/capabilities.ru.md).
+
 ## Документы
 
 | | По-русски | English |
