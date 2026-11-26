@@ -500,14 +500,17 @@ def _folder_result_click(
     if chip is None:
         return None
     cy = chip[1] + chip[3] / 2
+    # Строка поиска сидит примерно на 36 px ниже чипа. Результат — ниже неё.
+    # 26.11.2026 h-filtered-103601: вставленный путь прочитан в поле поиска
+    # на y=515, настоящая строка — на y=562. Порог +36 кликал поле.
     skip = {"repos", "search", "recents", "this", "computer", "nvironment"}
     best = None
     for x, y, w, h, _c, t in words:
         nt = _norm_tok(t)
-        if len(nt) < 2 or nt in skip:
+        if len(nt) < 2 or nt in skip or "nviron" in nt:
             continue
         midy = y + h / 2
-        if not (cy + 36 <= midy <= cy + 110):
+        if not (cy + 56 <= midy <= cy + 110):
             continue
         if not (700 <= x <= 1200):
             continue

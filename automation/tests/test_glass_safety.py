@@ -319,6 +319,18 @@ class FolderSearchTests(unittest.TestCase):
         ]
         self.assertEqual(find_anchor(words, "folder-search"), (986, 525))
 
+    def test_pasted_path_in_the_search_field_is_not_the_result(self):
+        # h-filtered-103601: путь в поле поиска на y=515, строка результата на y=562.
+        words = [
+            _w(800, 482, 137, 13, "curskill-cycle-20261125"),
+            _w(984, 473, 24, 29, "This"),
+            _w(1017, 473, 55, 29, "Computer"),
+            _w(807, 518, 93, 14, "Q_Ampreurskil"),
+            _w(924, 515, 96, 18, "iscard-20261126,"),
+            _w(830, 562, 187, 13, "Amp/curskill-discard-20261126"),
+        ]
+        self.assertEqual(find_anchor(words, "folder-result"), (923, 568))
+
 
 class InventoryTests(unittest.TestCase):
     def test_four_kinds_and_a_draft(self):
