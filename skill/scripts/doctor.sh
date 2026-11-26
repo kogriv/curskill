@@ -191,7 +191,10 @@ if u.port:
 raise SystemExit(1)
 PY
   ) || { bad "прокси задан, порт из URL не разобран"; pport=""; }
-  if [ -n "$pport" ] && ss -ltn 2>/dev/null | grep -qE ":${pport}( |$)"; then
+  # ss | grep -q под pipefail даёт SIGPIPE, когда слушателей больше одного:
+  # grep выходит на первом совпадении, и доктор врёт, что порт молчит.
+  ports=$(ss -ltn 2>/dev/null || true)
+  if [ -n "$pport" ] && awk -v p="$pport" 'BEGIN{found=0} $0 ~ ":" p "( |$)" {found=1} END{exit !found}' <<<"$ports"; then
     ok "proxy стенда порт $pport слушает"
   elif [ -n "$pport" ]; then
     bad "proxy стенда порт $pport не слушает — up откажется"
