@@ -637,10 +637,19 @@ def reply_has(
 ) -> bool:
     """Слово в ответе ассистента, не в пузыре просьбы.
 
-    26.11.2026 _mcp-ready.png: просьба справа содержит MCP-SEEN (892,311),
-    ответ слева ниже — MCP-MISSING (307,558).
+    Пузырь просьбы прижат вправо. Длинная строка доходит влево до x≈470,
+    и обрезка «x < 700» забирает её хвост в ответ.
+    26.11.2026 11:37: MCP-MISSING просьбы на (472,451), MCP-SEEN той же
+    просьбы на (892,403). Левая колонка ответа начинается около x=300.
     """
-    parts = [t for x, y, _w, _h, _c, t in words if x < 700 and y > 420]
+    prompt_ys = [y for x, y, _w, _h, _c, _t in words if x >= 780 and y > 250]
+    parts: list[str] = []
+    for x, y, _w, _h, _c, t in words:
+        if y <= 420 or x >= 700:
+            continue
+        if x >= 420 and any(abs(y - py) <= 52 for py in prompt_ys):
+            continue
+        parts.append(t)
     text = " ".join(parts)
     compact = re.sub(r"[^A-Za-z0-9-]", "", text)
     return needle in text or needle in compact

@@ -304,8 +304,8 @@ sqlite: `scripts/glass.sh show bc-…`, `created-since`, `handoff-ok`,
     `/path @ <hostname> (Self-Hosted Worker)`, that other tabs were not
     touched, and the owner's mouse.
 13. "The session must see MCP" → do not stop at `mcp find` enabled.
-    Finish the MCP section (user json if needed) and check
-    `composer-send` / namespace `ready`.
+    The user `~/.cursor/mcp.json` has to contain the server before the
+    folder's worker starts. Check with `mcp ready`.
 
 ## Handoff and convert
 
@@ -370,24 +370,31 @@ Two different tests. Do not mix them.
 | UI | `mcp find NAME` is not `Disabled` (often "N tools enabled") | a `.cursor/mcp.json` file with no toggle |
 | RC session | the agent of this folder sees namespace `NAME` (`ready`) in dynamic tools | UI enable alone, or the file alone |
 
-A project `.cursor/mcp.json` and the user `~/.cursor/mcp.json`: the
-Customize toggle showed "87 tools enabled" in the UI, but the RC agent
-did not see the namespace until the server also existed in the **user**
-`~/.cursor/mcp.json`, the UI re-read the sources, and the folder's worker
-rebuilt the cache
+The Agents window reads a project `.cursor/mcp.json`. The private worker
+of a `local-rc` tab does not. At start it prewarms `~/.cursor/mcp.json`
+(a local command, or a localhost URL) into
 `$PROFILE/User/globalStorage/anysphere.cursor-agent-worker/worker-data/*/projects/<slug>/mcps/NAME/`
-(`SERVER_METADATA.json` plus `tools/`). Copying tool JSON into the cache
-by hand goes stale (`project-0-…` / `user-…` next to the canon). Do not
-do that.
+(`SERVER_METADATA.json` plus `tools/`). A project file that already
+exists before that start still stays out of the cache. A worker that is
+already running does not reread the user file. A new tab of the same
+folder uses that same worker. Copying tool JSON into the cache by hand
+goes stale (`project-0-…` / `user-…` next to the canon). Do not do that.
+
+Measured 2026-11-26 on k-99. Folder `mcp76a` had `curskill-probe` in its
+project file before handoff: the worker cache had `n8n`, `mt5`, and
+`ai-agent-bridge` only. Folder `mcp76b` had no project file; the same
+probe was in the user file before handoff: the cache gained
+`curskill-probe` and `tools/curskill_probe_ping.json`, and `mcp ready`
+made the tool write a `probe-ok-` token.
 
 ### Bringing a server to RC
 
-1. Write the json (no secrets on argv): project and/or user.
+1. Write the user json before the folder's worker starts (no secrets on argv):
    ```bash
-   scripts/stand.sh mcp add -w /ABS -n NAME --command /path [--arg …]
-   # if RC still does not see the namespace after enable, the same server as user:
-   scripts/stand.sh mcp add --user -n NAME --command /path
+   scripts/stand.sh mcp add --user -n NAME --command /path [--arg …]
    ```
+   `mcp add -w` writes the project file for the Agents window. That file
+   alone does not make the tab see the server.
 2. Toggle the source ON in Customize → MCPs (the script does this after `add`):
    ```bash
    scripts/stand.sh mcp find NAME    # UI
@@ -395,19 +402,19 @@ do that.
    ```
    Do not use Customize search (it breaks the panel tabs). The script does
    not fill the "New MCP Server" form.
-3. The folder's session tab is open and the worker is alive (`wait-worker`
-   / `workers`). Reload in the MCP panel, or Done after the toggle, if
-   needed. Do not `park` "just in case" (that kills other turns).
+3. The folder's worker must start after that user-file write (`handoff`
+   of a folder whose worker is not already running). Reload in the MCP
+   panel, or Done after the toggle, refreshes the window. Do not `park`
+   to reload a worker (that kills other turns). A new tab of a folder
+   that already has a worker does not reread the file.
 4. Check the **session**, not only the UI:
    ```bash
-   scripts/stand.sh focus --id bc-…
-   scripts/stand.sh composer-send --id bc-… \
-     'Reply one line: is namespace NAME in your dynamic tools? ready/missing.'
+   scripts/stand.sh mcp ready NAME --id bc-…
    ```
-   Success: the agent's reply is `ready`, **or** the worker cache has the
-   canon `…/mcps/NAME/` with tools and the duplicates are unnecessary.
+   Success: the tool writes its token, or the reply is `MCP-SEEN`.
+   The worker cache has the canon `…/mcps/NAME/` with tools.
    OCR `mcp list` may show two rows of one name (project + user). That is
-   normal while the session sees one namespace `ready`.
+   the window. The tab follows the user file.
 5. After sync, stale `project-0-NAME` / `user-NAME` directories in the
    worker cache can be removed. Leave the canon `NAME`. Do not clean the
    cache while the session is still `missing`.

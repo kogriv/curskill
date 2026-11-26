@@ -2551,8 +2551,31 @@ raise SystemExit(1)
 PY
 }
 
-# mcp ready NAME --id bc-…: сервер есть в json, включён в UI вкладки стенда,
-# и открытая local-rc это подтвердила. Тумблеры Settings → Agents не трогает.
+# Воркер вкладки local-rc при старте читает ~/.cursor/mcp.json.
+# Файл папки в этот кэш не попадает. Уже запущенный воркер запись не перечитывает.
+worker_mcp_cached() {
+  local ws=$1 name=$2 slug root
+  slug=${ws#/}
+  slug=${slug//\//-}
+  root="$PROFILE/User/globalStorage/anysphere.cursor-agent-worker/worker-data"
+  [ -d "$root" ] || return 1
+  local d
+  shopt -s nullglob
+  for d in "$root"/*/projects/"$slug"/mcps/"$name" \
+           "$root"/*/projects/"$slug"/mcps/user-"$name" \
+           "$root"/*/projects/"$slug"/mcps/project-*-"$name"; do
+    if [ -f "$d/SERVER_METADATA.json" ] || [ -d "$d/tools" ]; then
+      shopt -u nullglob
+      return 0
+    fi
+  done
+  shopt -u nullglob
+  return 1
+}
+
+# mcp ready NAME --id bc-…: сервер в пользовательском mcp.json, кэш воркера
+# этой папки его содержит, панель не говорит disabled, вкладка это подтвердила.
+# Тумблеры Settings → Agents не трогает.
 mcp_ready_tab() {
   local name="" id=""
   while [ $# -gt 0 ]; do
@@ -2571,13 +2594,16 @@ mcp_ready_tab() {
   class=$(printf '%s\n' "$show" | sed -n 's/^class=//p')
   [ "$class" = "local-rc" ] || { echo "mcp ready: $id класс $class, нужна вкладка local-rc" >&2; return 1; }
   ws=$(printf '%s\n' "$show" | sed -n "s/^workspaceRootPath='\\(.*\\)'\$/\\1/p")
-  local json_hit=""
-  if [ -n "$ws" ] && mcp_server_in_json "$ws/.cursor/mcp.json" "$name"; then
-    json_hit="$ws/.cursor/mcp.json"
-  elif mcp_server_in_json "$HOME/.cursor/mcp.json" "$name"; then
-    json_hit="$HOME/.cursor/mcp.json"
-  else
-    echo "mcp ready: $name нет в mcp.json папки сессии и в пользовательском mcp.json" >&2
+  local json_hit="$HOME/.cursor/mcp.json"
+  if ! mcp_server_in_json "$json_hit" "$name"; then
+    echo "mcp ready: $name нет в пользовательском mcp.json" >&2
+    echo "mcp ready: воркер вкладки читает этот файл при старте. Файл папки виден окну Agents и в кэш воркера не попадает." >&2
+    echo "mcp ready: сначала mcp add --user, затем вкладка, чей воркер стартовал после записи" >&2
+    return 1
+  fi
+  if [ -z "$ws" ] || ! worker_mcp_cached "$ws" "$name"; then
+    echo "mcp ready: $name есть в пользовательском mcp.json, кэш воркера этой папки его не содержит" >&2
+    echo "mcp ready: уже запущенный воркер файл не перечитывает. Новая вкладка той же папки идёт в тот же воркер." >&2
     return 1
   fi
   local shot known line prev_id prev_name
@@ -2602,9 +2628,6 @@ mcp_ready_tab() {
     || return 1
   local i
   for i in $(seq 1 90); do
-    if [ -n "$probe" ] && [ -f "$probe" ] && grep -qE '^probe-ok-[0-9a-f]{16}$' "$probe"; then
-      break
-    fi
     if python3 "$GLASS_AGENTS" busy "$(hostname)" | awk -F '\t' -v id="$id" '$1==id {found=1} END{exit !found}'; then
       sleep 2
       continue
@@ -2619,15 +2642,16 @@ mcp_ready_tab() {
   mkdir -p "$VAR/shots"
   shot="$VAR/shots/_mcp-ready.png"
   DISPLAY="$DISP" import -window root "$shot" 2>/dev/null || DISPLAY="$DISP" scrot -o "$shot"
-  if python3 "$GLASS_AGENTS" reply-has "$shot" "MCP-MISSING"; then
-    echo "mcp ready: вкладка ответила MCP-MISSING" >&2
-  elif python3 "$GLASS_AGENTS" reply-has "$shot" "MCP-SEEN"; then
-    proved=1
-    echo "mcp ready: вкладка ответила MCP-SEEN"
-  fi
   if python3 "$GLASS_AGENTS" reply-has "$shot" "probe-ok-"; then
     proved=1
     echo "mcp ready: вкладка ответила токеном инструмента"
+  fi
+  if python3 "$GLASS_AGENTS" reply-has "$shot" "MCP-SEEN"; then
+    proved=1
+    echo "mcp ready: вкладка ответила MCP-SEEN"
+  fi
+  if [ "$proved" != 1 ] && python3 "$GLASS_AGENTS" reply-has "$shot" "MCP-MISSING"; then
+    echo "mcp ready: вкладка ответила MCP-MISSING" >&2
   fi
   if [ "$proved" != 1 ]; then
     echo "mcp ready: вкладка $id не подтвердила сервер $name" >&2
@@ -2755,6 +2779,9 @@ cmd_mcp() {
       fi
       "${merge[@]}"
       echo "mcp add: записан $target (сервер $name)"
+      if [ "$user" != 1 ]; then
+        echo "mcp add: файл папки виден окну Agents. Вкладка local-rc читает пользовательский mcp.json, и только если воркер стартовал после записи."
+      fi
       # После записи файла UI может ещё не знать сервер — Reload в карточке после enable.
       if mcp_set_enabled "$name" on "$ws"; then
         rc=0

@@ -287,8 +287,8 @@ Worker — ловушка нового чата, не RC.
     `/path @ <hostname> (Self-Hosted Worker)`, что другие вкладки не трогал,
     мышь стола.
 13. «Сессия должна видеть MCP» → не останавливаться на `mcp find`
-    enabled: довести по разделу MCP (user json при необходимости) и
-    проверить `composer-send` / namespace `ready`.
+    enabled. Сервер должен быть в пользовательском `~/.cursor/mcp.json`
+    до старта воркера папки. Проверка — `mcp ready`.
 
 ## Handoff и convert
 
@@ -348,22 +348,31 @@ Search Agents (Ctrl+Alt+P) по **bc-id**; sqlite `selectedAgent` должен
 | UI | `mcp find NAME` → не `Disabled` (часто «N tools enabled») | файл `.cursor/mcp.json` без тоггла |
 | сессия RC | агент этой папки видит namespace `NAME` (`ready`) в dynamic tools | только UI enable / только файл |
 
-Проектный `.cursor/mcp.json` и пользовательский `~/.cursor/mcp.json`:
-тоггл в Customize давали «87 tools enabled» в UI, но RC-агент namespace не
-видел, пока сервер не появился ещё и в **user** `~/.cursor/mcp.json`, UI
-перечитал источники, воркер папки пересобрал кэш
+Окно Agents читает проектный `.cursor/mcp.json`. Воркер вкладки
+`local-rc` его не читает. При старте он прогревает `~/.cursor/mcp.json`
+(локальная команда или URL на localhost) в
 `$PROFILE/User/globalStorage/anysphere.cursor-agent-worker/worker-data/*/projects/<slug>/mcps/NAME/`
-(есть `SERVER_METADATA.json` + `tools/`). Ручное копирование tool-JSON в
-кэш даёт stale (`project-0-…` / `user-…` рядом с каноном) — не делать.
+(`SERVER_METADATA.json` и `tools/`). Файл папки, записанный до этого
+старта, в кэш всё равно не попадает. Уже запущенный воркер пользовательский
+файл не перечитывает. Новая вкладка той же папки идёт в тот же воркер.
+Ручное копирование tool-JSON в кэш даёт stale (`project-0-…` / `user-…`
+рядом с каноном) — не делать.
+
+Замер 26.11.2026 на k-99. У папки `mcp76a` зонд `curskill-probe` лежал в
+файле папки до handoff: в кэше воркера были только `n8n`, `mt5` и
+`ai-agent-bridge`. У папки `mcp76b` файла папки не было; тот же зонд лежал
+в пользовательском файле до handoff: в кэше появились `curskill-probe` и
+`tools/curskill_probe_ping.json`, а `mcp ready` дошёл до записи токена
+`probe-ok-`.
 
 ### Порядок доведения сервера до RC
 
-1. Запись json (без секретов в argv): проект и/или user.
+1. Записать пользовательский json до старта воркера папки (без секретов в argv):
    ```bash
-   scripts/stand.sh mcp add -w /ABS -n NAME --command /path [--arg …]
-   # если RC после enable так и не видит namespace — тот же сервер в user:
-   scripts/stand.sh mcp add --user -n NAME --command /path
+   scripts/stand.sh mcp add --user -n NAME --command /path [--arg …]
    ```
+   `mcp add -w` пишет файл папки для окна Agents. Одного этого файла
+   вкладке мало.
 2. Тоггл источника ON в Customize → MCPs (скрипт сам после `add`):
    ```bash
    scripts/stand.sh mcp find NAME    # UI
@@ -371,19 +380,19 @@ Search Agents (Ctrl+Alt+P) по **bc-id**; sqlite `selectedAgent` должен
    ```
    Поиск Customize search **не** использовать (ломает вкладки). Форму
    «New MCP Server» скрипт не заполняет.
-3. Вкладка сессии папки открыта → воркер жив (`wait-worker` / `workers`).
-   При необходимости Reload в панели MCP / Done после тоггла; не `park`
-   «на всякий случай» (убьёт чужие ходы).
+3. Воркер папки должен стартовать после этой записи (`handoff` папки,
+   у которой воркер ещё не запущен). Reload в панели MCP и Done после
+   тоггла обновляют окно. Не делать `park`, чтобы перечитать файл
+   (убьёт чужие ходы). Новая вкладка папки, у которой воркер уже есть,
+   файл не перечитывает.
 4. Проверка **сессии**, не только UI:
    ```bash
-   scripts/stand.sh focus --id bc-…
-   scripts/stand.sh composer-send --id bc-… \
-     'Reply one line: is namespace NAME in your dynamic tools? ready/missing.'
+   scripts/stand.sh mcp ready NAME --id bc-…
    ```
-   Успех: ответ агента `ready` **или** в кэше воркера канон
-   `…/mcps/NAME/` с tools и без необходимости дублей. OCR `mcp list` может
-   показать две строки одного имени (project + user) — норма, пока сессия
-   видит один namespace `ready`.
+   Успех: инструмент записал токен или ответ `MCP-SEEN`.
+   В кэше воркера есть канон `…/mcps/NAME/` с tools.
+   OCR `mcp list` может показать две строки одного имени (project + user):
+   это окно. Вкладка идёт за пользовательским файлом.
 5. После синхронизации устаревшие каталоги `project-0-NAME` / `user-NAME` в
    кэше воркера можно удалить; канон `NAME` оставить. Не чистить кэш, пока
    сессия ещё `missing`.

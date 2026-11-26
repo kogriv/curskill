@@ -214,16 +214,18 @@ under it. The bottom of the page is "Allowlist Options" or
 Customize. A local-rc agent sees MCP when the private worker has written
 the canon into
 `$PROFILE/…/cursor-agent-worker/worker-data/<id>/projects/<slug>/mcps/<NAME>/`
-(`SERVER_METADATA.json` plus `tools/`). If a project `.cursor/mcp.json`
-plus enable still do not put the namespace in the session, add the same
-server to the user `~/.cursor/mcp.json` (`mcp add --user`), `enable`
-again, open the folder's tab, and wait for the cache. Check with
-`composer-send` ("namespace … ready"). Cache duplicates `project-0-<NAME>`
-and `user-<NAME>` are a side effect of the source id changing. After
-`ready`, leave the canon `<NAME>` and the duplicates can go. Do not plant
-tool files in the cache by hand (a stale lease). For the user, "the
-session saw MCP" means the agent's reply or namespace `ready`, not a line
-in `mcp list`.
+(`SERVER_METADATA.json` plus `tools/`). The worker writes that canon from
+`~/.cursor/mcp.json` at start. The project `.cursor/mcp.json` stays in
+the Agents window. A running worker does not reread the user file, and a
+new tab of the same folder does not start a second worker. Check with
+`mcp ready NAME --id`. It refuses a name that is missing from the user
+file or from this folder's cache, then asks the open tab. A `probe-ok-`
+token or the reply `MCP-SEEN` counts. `MCP-MISSING` inside the prompt
+bubble does not. Cache duplicates `project-0-<NAME>` and `user-<NAME>`
+are a side effect of the source id changing. After `ready`, leave the
+canon `<NAME>` and the duplicates can go. Do not plant tool files in the
+cache by hand (a stale lease). For the user, "the session saw MCP" means
+the agent's reply or the tool token, not a line in `mcp list`.
 
 Rename and archive: X=120, Y=the bright sidebar band. Y<130 is New Chat,
 a refusal. If `shot` after a step is the wrong UI, stop. Do not tune
@@ -361,4 +363,4 @@ A successful handoff prints one block: bc-id, `https://cursor.com/agents/<bc-id>
 
 `scripts/glass.sh inventory` lists non-archived rows: id, name, folder, class (`local-rc`, `environment`, `private-incomplete`, `other`), working, worker. A selected uuid with no `cloudAgentRepository` row is `local-draft`. `discard --id` is only for that draft. A row that `resolve` can see is archive or convert, not Discard. Discard refuses when the word Stop is on the screen, when the id or name is protected, and when the Discard item is not in the sidebar menu. It does not click a neighbour and it does not use Archive All Below.
 
-`mcp ready NAME --id` checks the open `local-rc` tab. The server must be in that folder's `mcp.json` or in the user `mcp.json`, and the MCPs panel must not say disabled. The tab then gets one composer message. Settings → Agents toggles are not clicked.
+`mcp ready NAME --id` checks the open `local-rc` tab. The server must be in the user `~/.cursor/mcp.json`, and this folder's worker cache must already contain it. The MCPs panel must not say disabled. The tab then gets one composer message. A project file alone is refused before that message. Settings → Agents toggles are not clicked.

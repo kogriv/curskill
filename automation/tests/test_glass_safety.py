@@ -451,6 +451,18 @@ class McpPanelTests(unittest.TestCase):
         self.assertFalse(reply_has(words, "MCP-SEEN"))
         self.assertTrue(reply_has(words, "MCP-MISSING"))
 
+    def test_long_prompt_bubble_is_not_the_reply(self):
+        # 26.11.2026 11:37: хвост просьбы MCP-MISSING на x=472, не ответ.
+        words = [
+            _w(892, 403, 75, 12, "MCP-SEEN."),
+            _w(472, 451, 101, 12, "MCP-MISSING."),
+            _w(337, 535, 40, 14, "probe"),
+            _w(606, 536, 153, 14, "curskill_probe_ping"),
+        ]
+        self.assertFalse(reply_has(words, "MCP-MISSING"))
+        self.assertFalse(reply_has(words, "MCP-SEEN"))
+        self.assertTrue(reply_has(words, "curskill_probe_ping"))
+
     def test_sidebar_accepts_one_substituted_letter(self):
         words = [_w(41, 210, 70, 13, "mep-seen"), _w(41, 240, 60, 13, "mep-e2e")]
         self.assertTrue(sidebar_row_matches(words, 216, "mcp-seen"))
