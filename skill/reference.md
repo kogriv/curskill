@@ -101,9 +101,9 @@ OCR splits a short name. Cyrillic comes out as noise. `palette-ok` must
 find the name **or** the bc-id / 12+ characters of a uuid without hyphens.
 If it does not, Escape.
 
-## The 3.23 Environment trap versus RC conversion (2026-10-07)
+## Environment trap versus RC conversion (captured 2026-10-07 on 3.23)
 
-On Cursor 3.23 three different gestures, and one of them is RC:
+Three gestures, measured on Cursor 3.23. Handoff on package 3.30.14 still reached `local-rc` on 2026-11-26. One of the gestures is RC:
 
 | gesture | what you get |
 |---|---|
@@ -148,7 +148,7 @@ The first turn is not finished while the shot shows "Planning next
 moves", even if the footer and the follow-up field are already there
 (2026-11-25, `move-working-cancel-155123.png`). Handoff keeps waiting.
 
-## UI anchors (glass 1920×1080 at 0,0, package 3.23.23)
+## UI anchors (glass 1920×1080 at 0,0; token list calibrated on 3.23.23, handoff checked on package 3.30.14 on 2026-11-26)
 
 The table is in `glass_agents.py` (`ANCHORS`). `anchor SHOT name` prints
 `x y` or exits 1. A zone is where to look, not the click point.

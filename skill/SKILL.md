@@ -3,14 +3,16 @@ name: curskill
 description: >-
   Raises and manages Cursor desktop Agents Window sessions with Remote Control
   on an isolated X11 stand (NVIDIA GPU Xorg by default, Xvfb if no GPU/sudo),
-  never the owner's desktop. Runs cursor-stand.sh: status, up, handoff, rename,
-  mcp (list/find/enable/disable/add), settings agents (read-only), convert (local chat → RC), shot,
-  wait-worker, composer-send, pick-display. On Cursor 3.23 handoff sends a
-  short first message, converts via footer This Computer → Self-Hosted Worker,
-  then optional --then task; not slash `/remote-control`. Use when spawning a
-  new Agents Window session, converting a stuck local chat, enabling Remote
-  Control, renaming a glass session, enabling project MCP, operating the
-  Cursor stand, :105, VNC, Xvfb, CURSOR_STAND_X, handoff, or «поднять агента».
+  never the owner's desktop. Runs cursor-stand.sh: status, up, handoff, convert,
+  rename, archive, discard, focus, inventory, mcp (list/find/enable/disable/add/ready),
+  settings agents (read-only), shot, wait-worker, composer-send, pick-display.
+  Handoff sends a short first message, converts via footer This Computer →
+  Self-Hosted Worker, then an optional --then task. Not the slash `/remote-control`.
+  A local-rc tab sees an MCP server from the user ~/.cursor/mcp.json when that
+  folder's worker started after the write. Use when spawning a new Agents Window
+  session, converting a stuck local chat, enabling Remote Control, renaming a
+  glass session, bringing an MCP server to that tab, operating the Cursor stand,
+  :105, VNC, Xvfb, CURSOR_STAND_X, handoff, or «поднять агента».
   Not Cloud Agents and not the terminal `agent` CLI. Linux X11 only.
   Skill name: curskill.
 ---
@@ -143,7 +145,9 @@ Do **not** copy the screen script into the skill. It is
 `CURSOR_STAND_DISPLAY_SH`.
 
 Paths below are from this skill's root. `scripts/stand.sh` resolves the
-canon (`CURSOR_STAND_SH=` if you must).
+canon (`CURSOR_STAND_SH=` if you must). What each command does, and what
+it does not do, is [capabilities.md](capabilities.md). The block below is
+the same commands in the order the agent runs them.
 
 ```bash
 scripts/doctor.sh
@@ -234,7 +238,8 @@ Worker)" and `@ host` disappeared from it. `CURSOR_STAND_UI_CALIBRATED`
 (default 3.23, reported by `doctor` / `ui-checked`) is not yet raised to
 3.30. Raise it after a full UI re-check.
 
-**How local-rc is produced on 3.23.** Return in a new chat yields a local
+**How local-rc is produced.** The sequence was captured on 3.23. Handoff
+reached `local-rc` again on package 3.30.14 on 2026-11-26. Return in a new chat yields a local
 uuid with no `bc-`. **The task is the second message** (`--then` /
 `--then-file`): a short first message (default READY), wait until the turn
 ends, convert, then the task. A long prompt as the first message starts
@@ -314,7 +319,7 @@ Home, not No Repo, not a Recents name, not a GitHub repo in place of a
 path, not `~/.config/Cursor`, not the stand profile). The script inserts
 the path in the picker by clicking the row (not Return in the search —
 that picks Recents/GitHub and becomes an Environment). Do **not** call
-`/remote-control`: on 3.23 the slash starts an Environment by itself.
+`/remote-control`: on the builds this stand measured, including 3.23, the slash starts an Environment by itself. The same rule stands on 3.30.14.
 
 **Order (2026-10-13).** (1) A short first message (default READY; a
 positional text longer than 120 characters is a refusal). (2) Wait until
@@ -587,10 +592,13 @@ Runtime, shots, `state.env`, and `hold` live in `$PROFILE/var`, outside git.
 ## What this skill does not take over
 
 The development order and the reasons are in
-[skill/docs/roadmap/README.md](docs/roadmap/README.md). Open work is
-BL-067…BL-078. BL-067 is a measurement; until it is written down, do not
-add new clicks on the folder chip or the Run on chip. Do not start those
-tasks from this file. Start one only when the person asked for that task.
+[skill/docs/roadmap/README.md](docs/roadmap/README.md). Open work is the
+backlog rows whose status is not done. On 2026-11-26 that is BL-074,
+which waits for a free stand start, and BL-075, which waits for a machine
+with AMD, Intel, or Wayland. BL-067 is done: `agent worker start` did not
+create a stand-profile tab, and handoff still opens `local-rc`. Do not
+start a backlog row from this file. Start one only when the person asked
+for that row.
 
 This skill does not take over:
 

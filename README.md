@@ -10,7 +10,8 @@ Russian: [README.ru.md](README.ru.md). English is the copy to follow.
 | GPU, and why you can skip it | [What draws the window](skill/display.md#gpu) | [Чем рисовать](skill/display.ru.md#gpu) |
 | Why a second X server | [display.md](skill/display.md) | [display.ru.md](skill/display.ru.md) |
 | Install, packages, host file | [SETUP.md](SETUP.md) | [SETUP.ru.md](SETUP.ru.md) |
-| Commands the agent runs | [SKILL.md](skill/SKILL.md) | [SKILL.ru.md](skill/SKILL.ru.md) |
+| What the skill can do | [capabilities.md](skill/capabilities.md) | [capabilities.ru.md](skill/capabilities.ru.md) |
+| What the agent does on the stand | [SKILL.md](skill/SKILL.md) | [SKILL.ru.md](skill/SKILL.ru.md) |
 | Failures, anchors, sqlite | [reference.md](skill/reference.md) | [reference.ru.md](skill/reference.ru.md) |
 | One stand per machine | [hosts.md](skill/hosts.md) | [hosts.ru.md](skill/hosts.ru.md) |
 | Script index | [automation/README.md](automation/README.md) | [automation/README.ru.md](automation/README.ru.md) |

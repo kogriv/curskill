@@ -3,14 +3,16 @@ name: curskill
 description: >-
   Raises and manages Cursor desktop Agents Window sessions with Remote Control
   on an isolated X11 stand (NVIDIA GPU Xorg by default, Xvfb if no GPU/sudo),
-  never the owner's desktop. Runs cursor-stand.sh: status, up, handoff, rename,
-  mcp (list/find/enable/disable/add), settings agents (read-only), convert (local chat → RC), shot,
-  wait-worker, composer-send, pick-display. On Cursor 3.23 handoff sends a
-  short first message, converts via footer This Computer → Self-Hosted Worker,
-  then optional --then task; not slash `/remote-control`. Use when spawning a
-  new Agents Window session, converting a stuck local chat, enabling Remote
-  Control, renaming a glass session, enabling project MCP, operating the
-  Cursor stand, :105, VNC, Xvfb, CURSOR_STAND_X, handoff, or «поднять агента».
+  never the owner's desktop. Runs cursor-stand.sh: status, up, handoff, convert,
+  rename, archive, discard, focus, inventory, mcp (list/find/enable/disable/add/ready),
+  settings agents (read-only), shot, wait-worker, composer-send, pick-display.
+  Handoff sends a short first message, converts via footer This Computer →
+  Self-Hosted Worker, then an optional --then task. Not the slash `/remote-control`.
+  A local-rc tab sees an MCP server from the user ~/.cursor/mcp.json when that
+  folder's worker started after the write. Use when spawning a new Agents Window
+  session, converting a stuck local chat, enabling Remote Control, renaming a
+  glass session, bringing an MCP server to that tab, operating the Cursor stand,
+  :105, VNC, Xvfb, CURSOR_STAND_X, handoff, or «поднять агента».
   Not Cloud Agents and not the terminal `agent` CLI. Linux X11 only.
   Skill name: curskill.
 ---
@@ -135,7 +137,9 @@ Claude Code — `.claude/skills/curskill` (симлинк на неё же). В�
 `CURSOR_STAND_DISPLAY_SH`.
 
 Пути ниже — от корня этого скилла. `scripts/stand.sh` резолвит канон
-(`CURSOR_STAND_SH=` если надо).
+(`CURSOR_STAND_SH=` если надо). Что делает каждая команда и чего она не
+делает — [capabilities.ru.md](capabilities.ru.md). Блок ниже — те же
+команды в порядке, в котором их вызывает агент.
 
 ```bash
 scripts/doctor.sh
@@ -223,7 +227,8 @@ Return, читай [reference.ru.md](reference.ru.md).
 (дефолт 3.23, справка в `doctor` / `ui-checked`) пока не поднят до 3.30 —
 обновить при полной реверификации UI.
 
-**Как получается local-rc на 3.23.** Return в новом чате даёт локальный
+**Как получается local-rc.** Порядок снят на 3.23. Handoff снова дошёл до
+`local-rc` на пакете 3.30.14 26.11.2026. Return в новом чате даёт локальный
 uuid без `bc-`. **Задача — вторым сообщением** (`--then` / `--then-file`):
 первое короткое (дефолт READY), дождаться конца хода, конвертация, потом
 задача. Длинный промпт первым — агент стартует до convert и Cursor показывает
@@ -296,7 +301,7 @@ Worker — ловушка нового чата, не RC.
 не No Repo, не Recents-имя, не GitHub-репо вместо пути, не
 `~/.config/Cursor`, не профиль стенда). Скрипт вставляет путь в пикер
 кликом по строке (не Return в поиске — иначе Recents/GitHub → Environment).
-`/remote-control` **не** вызывать: на 3.23 слэш сам стартует Environment.
+`/remote-control` **не** вызывать: на сборках, где стенд измеряли, включая 3.23, слэш сам стартует Environment. На 3.30.14 правило то же.
 
 **Порядок (13.10.2026).** (1) Короткое первое сообщение (дефолт READY;
 позиционный текст >120 символов — отказ). (2) Ждать конец хода (футер +
@@ -551,9 +556,11 @@ Runtime, снимки, `state.env`, `hold` — `$PROFILE/var`, вне git.
 
 Порядок развития и причины — в
 [skill/docs/roadmap/README.md](docs/roadmap/README.md). Открытая работа —
-BL-067…BL-078. BL-067 — замер. Пока он не записан, новые клики по чипу
-папки и по чипу «Run on» не добавлять. Из этого файла задачи не
-начинать. Начинать одну только когда человек попросил именно её.
+строки бэклога, чей статус не `done`. На 26.11.2026 это BL-074, он ждёт
+свободный запуск стенда, и BL-075, он ждёт машину с AMD, Intel или
+Wayland. BL-067 закрыт: `agent worker start` вкладку профиля стенда не
+создал, `local-rc` по-прежнему открывает handoff. Из этого файла строки
+бэклога не начинать. Начинать одну только когда человек попросил именно её.
 
 Скилл на себя не берёт:
 

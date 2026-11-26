@@ -1,6 +1,8 @@
-# Команды стенда
+# Указатель скриптов
 
 Английский — источник правды: [README.md](README.md).
+
+Что делают команды — в [каталоге](../skill/capabilities.ru.md).
 
 Канон — [`cursor-stand.sh`](./cursor-stand.sh).
 Экран по умолчанию — [`display/stand-display.sh`](./display/stand-display.sh).

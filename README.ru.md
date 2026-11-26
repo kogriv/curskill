@@ -10,7 +10,8 @@
 | Видеокарта и почему её можно не брать | [Чем рисовать](skill/display.ru.md#gpu) | [What draws the window](skill/display.md#gpu) |
 | Зачем второй X-сервер | [display.ru.md](skill/display.ru.md) | [display.md](skill/display.md) |
 | Установка, пакеты, файл хоста | [SETUP.ru.md](SETUP.ru.md) | [SETUP.md](SETUP.md) |
-| Команды, которые выполняет агент | [SKILL.ru.md](skill/SKILL.ru.md) | [SKILL.md](skill/SKILL.md) |
+| Что умеет скилл | [capabilities.ru.md](skill/capabilities.ru.md) | [capabilities.md](skill/capabilities.md) |
+| Что агент делает на стенде | [SKILL.ru.md](skill/SKILL.ru.md) | [SKILL.md](skill/SKILL.md) |
 | Отказы, якоря, sqlite | [reference.ru.md](skill/reference.ru.md) | [reference.md](skill/reference.md) |
 | Один стенд на машину | [hosts.ru.md](skill/hosts.ru.md) | [hosts.md](skill/hosts.md) |
 | Указатель скриптов | [automation/README.ru.md](automation/README.ru.md) | [automation/README.md](automation/README.md) |

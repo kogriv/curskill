@@ -4,7 +4,7 @@
 # Зачем. Штатного тула «новый агент + /remote-control» нет. CLI/Cloud —
 # другие сессии. Computer-use по столу владельца (:1) крадёт фокус.
 # Эталон 19.09.2026: свой DISPLAY, --user-data-dir, cursor-proxy, не копия
-# живого ~/.config/Cursor. Замер: INVENTORY.md, волны 2–4.
+# живого ~/.config/Cursor. Каталог команд: skill/capabilities.md.
 #
 # Экран: CURSOR_STAND_DISPLAY_SH, иначе $HERE/display/stand-display.sh.
 # Останавливать Xorg только по PID своего дисплея, никогда pkill Xorg.
@@ -29,10 +29,11 @@
 #   glass_agents.py inventory            # вкладки профиля, включая local-draft
 #   cursor-stand.sh mcp list                     # Customize → MCPs, список серверов
 #   cursor-stand.sh mcp find NAME                # есть ли NAME (код 0/1 + status)
-#   cursor-stand.sh mcp enable NAME              # тоггл источника ON (проектный/user)
+#   cursor-stand.sh mcp enable NAME              # тоггл источника ON в окне
 #   cursor-stand.sh mcp disable NAME             # тоггл OFF
-#   cursor-stand.sh mcp add -w /ABS -n NAME --command /path [--arg …]
-#   cursor-stand.sh mcp add --user -n NAME --command /path   # ~/.cursor/mcp.json
+#   cursor-stand.sh mcp add -w /ABS -n NAME --command /path [--arg …]  # файл папки, окно
+#   cursor-stand.sh mcp add --user -n NAME --command /path   # ~/.cursor/mcp.json, вкладка
+#   cursor-stand.sh mcp ready NAME --id bc-…     # вкладка local-rc видит сервер
 #   cursor-stand.sh settings agents              # Settings → Agents, только чтение
 #   cursor-stand.sh wait-worker /path/to/project   # ждать private worker папки (не печатать cmdline)
 #   cursor-stand.sh composer-send              # Return в композер текущей вкладки (resend)
@@ -45,8 +46,11 @@
 # Один стенд :105, только этот хост. Новые агенты — вкладки, не новые Xorg.
 #
 # Журнал и state — $CURSOR_STAND_PROFILE/var (вне git). Секреты сюда не писать.
-# Handoff 3.23: короткое первое сообщение → конвертация футера → задача
+# Handoff снят на 3.23 и снова дошёл до local-rc на пакете 3.30.14
+# 26.11.2026: короткое первое сообщение → конвертация футера → задача
 # (--then / --then-file). Слэш /remote-control не использовать.
+# Файл папки MCP виден окну. Вкладка читает ~/.cursor/mcp.json, если воркер
+# стартовал после записи.
 # Оверлеи: toast expensive-processes (крестик), диалог Move agent… (Cancel).
 
 set -euo pipefail

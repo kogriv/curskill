@@ -1,6 +1,8 @@
-# Stand commands
+# Script index
 
 Russian: [README.ru.md](README.ru.md). English is the copy to follow.
+
+What the commands do is [the catalog](../skill/capabilities.md).
 
 The canon is [`cursor-stand.sh`](./cursor-stand.sh).
 The default screen is [`display/stand-display.sh`](./display/stand-display.sh).
