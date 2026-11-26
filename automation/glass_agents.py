@@ -930,6 +930,8 @@ def mcp_list_from_shot(
             anchors.append((y, "error"))
         elif nt in {"enabled", "tools"}:
             anchors.append((y, "enabled"))
+        elif nt == "connecting":
+            anchors.append((y, "connecting"))
     rows: list[dict[str, str]] = []
     used_y: list[int] = []
     for ay, status in anchors:
