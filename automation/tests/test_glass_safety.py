@@ -309,6 +309,17 @@ class McpModeTests(unittest.TestCase):
             self.assertEqual(os.stat(path).st_mode & 0o777, 0o640)
 
 
+class FolderSearchTests(unittest.TestCase):
+    def test_truncated_environments_still_finds_the_field(self):
+        # Снимок h-picker-103429.png: repos стало «re|», environments — «environmer».
+        words = [
+            _w(831, 519, 39, 10, "Search"),
+            _w(881, 523, 5, 3, "re|"),
+            _w(954, 522, 64, 7, "environmer"),
+        ]
+        self.assertEqual(find_anchor(words, "folder-search"), (986, 525))
+
+
 class InventoryTests(unittest.TestCase):
     def test_four_kinds_and_a_draft(self):
         agents = [

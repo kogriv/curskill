@@ -308,7 +308,9 @@ ANCHORS: dict[str, dict] = {
         # 10.10.2026: плейсхолдер стал «Search repos, cloud environments…»,
         # «repos,» OCR рвёт на «re» + «5,»; конец надписи читается надёжнее, но
         # тоже плавает («environments.» / «environment:»), поэтому подстрока.
-        "alt": (("nvironment",),),
+        # 26.11.2026 10:34: OCR прочитал environments как environmer.
+        # «nvironment» в это слово не входит, «nviron» входит и в полную надпись.
+        "alt": (("nvironment",), ("nviron",)),
         "zone": (740, 490, 1100, 545),
         "click": "union-center",
     },
