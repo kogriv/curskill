@@ -739,6 +739,9 @@ def _row_token_hits(part: str, tokens: list[str]) -> bool:
             return True
         if tok.startswith(part) and len(part) * 2 >= len(tok):
             return True
+        # mcp-seen читается как mep-seen: одна подмена, длины равны.
+        if _ocr_name_match(part, tok):
+            return True
     return False
 
 

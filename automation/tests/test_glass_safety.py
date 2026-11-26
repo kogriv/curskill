@@ -451,6 +451,11 @@ class McpPanelTests(unittest.TestCase):
         self.assertFalse(reply_has(words, "MCP-SEEN"))
         self.assertTrue(reply_has(words, "MCP-MISSING"))
 
+    def test_sidebar_accepts_one_substituted_letter(self):
+        words = [_w(41, 210, 70, 13, "mep-seen"), _w(41, 240, 60, 13, "mep-e2e")]
+        self.assertTrue(sidebar_row_matches(words, 216, "mcp-seen"))
+        self.assertFalse(sidebar_row_matches(words, 246, "mcp-seen"))
+
 
 class SettingsReportTests(unittest.TestCase):
     def test_labels_for_the_required_rows(self):
