@@ -510,14 +510,9 @@ class ProbeServerTests(unittest.TestCase):
             assert proc.stdin and proc.stdout
 
             def send(payload: dict) -> dict:
-                body = json.dumps(payload).encode()
-                proc.stdin.write(f"Content-Length: {len(body)}\r\n\r\n".encode() + body)
+                proc.stdin.write(json.dumps(payload).encode() + b"\n")
                 proc.stdin.flush()
-                header = proc.stdout.readline()
-                self.assertTrue(header.lower().startswith(b"content-length:"))
-                length = int(header.split(b":", 1)[1].strip())
-                self.assertEqual(proc.stdout.readline(), b"\r\n")
-                return json.loads(proc.stdout.read(length))
+                return json.loads(proc.stdout.readline())
 
             try:
                 init = send({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
@@ -535,6 +530,32 @@ class ProbeServerTests(unittest.TestCase):
                 token = called["result"]["content"][0]["text"]
                 self.assertRegex(token, r"^probe-ok-[0-9a-f]{16}$")
                 self.assertEqual(out.read_text(encoding="utf-8").strip(), token)
+            finally:
+                if proc.stdin:
+                    proc.stdin.close()
+                proc.kill()
+                proc.wait(timeout=5)
+
+    def test_content_length_request_gets_a_json_line(self):
+        import json
+        import subprocess
+
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "token"
+            proc = subprocess.Popen(
+                ["python3", "automation/mcp_probe.py", str(out)],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+            )
+            assert proc.stdin and proc.stdout
+            body = json.dumps(
+                {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}
+            ).encode()
+            try:
+                proc.stdin.write(f"Content-Length: {len(body)}\r\n\r\n".encode() + body)
+                proc.stdin.flush()
+                reply = json.loads(proc.stdout.readline())
+                self.assertEqual(reply["result"]["serverInfo"]["name"], "curskill-probe")
             finally:
                 if proc.stdin:
                     proc.stdin.close()
